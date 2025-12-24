@@ -1,0 +1,35 @@
+# ETL Pipeline Configuration
+
+# Data source configuration
+data_source:
+  input_path: "data/raw/customers_200.xlsx"
+  input_format: "excel"  # Options: csv, excel, json
+  
+# Data destination configuration
+data_destination:
+  output_path: "data/processed/cleaned_data.csv"
+  output_formats:
+    - csv
+    - xlsx
+  csv_path: "data/processed/cleaned_data.csv"
+  xlsx_path: "data/processed/cleaned_data.xlsx"
+
+# Database configuration
+database:
+  type: "postgresql"
+  host: "postgres"
+  port: 5432
+  database: "airflow"
+  username: "airflow"
+  password: "airflow"
+  table_name: "customers_cleaned"
+  if_exists: "replace"  # Options: fail, replace, append
+
+# Cleaning rules reference
+cleaning_rules_file: "config/cleaning_rules.yaml"
+
+# Logging configuration
+logging:
+  level: "INFO"
+  log_to_file: true
+  log_file: "logs/etl_pipeline.log"

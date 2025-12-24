@@ -1,0 +1,79 @@
+# ETL Cleaning Configuration
+# This file defines data cleaning rules for the ETL pipeline
+
+# Column-specific cleaning rules
+columns:
+  name:
+    required: true
+    trim: true
+    uppercase: true
+    drop_if_missing: true
+    
+  email:
+    required: true
+    trim: true
+    validate_format: true
+    regex_pattern: '^[\w\.-]+@[\w\.-]+\.\w+$'
+    drop_if_missing: true
+    
+  age:
+    required: true
+    data_type: int
+    fill_strategy: mean
+    min_value: 0
+    max_value: 120
+    
+  last_order_date:
+    required: false
+    data_type: datetime
+    fill_strategy: drop
+    date_format: '%Y-%m-%d'
+
+# Global cleaning rules
+global:
+  remove_duplicates:
+    enabled: true
+    subset: ['email']
+    keep: 'first'
+    
+  handle_missing:
+    enabled: true
+    strategies:
+      numeric: 'mean'  # Options: mean, median, mode, drop, fill_value
+      categorical: 'mode'
+      datetime: 'drop'
+      
+  trim_whitespace:
+    enabled: true
+    apply_to_all_strings: true
+    
+  remove_empty_strings:
+    enabled: true
+    replace_with_nan: true
+
+# Data type conversions
+type_casting:
+  age: int
+  last_order_date: datetime
+  name: str
+  email: str
+
+# Data validation rules
+validation:
+  email_format: true
+  age_range:
+    min: 0
+    max: 120
+  required_columns:
+    - name
+    - email
+    - age
+
+# Output settings
+output:
+  sort_by: 'last_order_date'
+  sort_ascending: false
+  save_formats:
+    - csv
+    - xlsx
+    - postgresql
