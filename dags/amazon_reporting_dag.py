@@ -2,6 +2,7 @@ from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.sensors.external_task import ExternalTaskSensor
 from datetime import datetime, timedelta
+from pytz import timezone
 import logging
 import pandas as pd
 
@@ -66,16 +67,17 @@ with DAG(
                 "unique_customers": df["CustomerID"].nunique() if "CustomerID" in df.columns else 0,
             }
             
-            # Get execution date for sheet name
+            # Get execution date and actual run time in IST (India Standard Time)
+            ist = timezone('Asia/Kolkata')
             execution_date = ti.execution_date.strftime('%Y-%m-%d')
-            execution_datetime = ti.execution_date.strftime('%Y-%m-%d %H:%M:%S')
+            actual_run_time = datetime.now(ist).strftime('%Y-%m-%d %H:%M:%S')
             
             # Create DataFrame from report
             report_df = pd.DataFrame([report_data])
             report_df.insert(0, 'report_date', execution_date)
-            report_df.insert(1, 'report_time', execution_datetime)
+            report_df.insert(1, 'report_time', actual_run_time)
             
-            logging.info(f"[REPORTING] Report generated: {report_data}")
+            logging.info(f"[REPORTING] Report generated at {actual_run_time} IST: {report_data}")
             print(f"[REPORTING] Daily Report:\n{report_data}")
             
             # Save to orders_summary.xlsx as new sheet
@@ -100,21 +102,26 @@ with DAG(
             
             # Save to daily_reports.csv (append mode with time column)
             csv_path = "/opt/airflow/data/processed/daily_reports.csv"
-            report_df.to_csv(csv_path, mode='a', header=not pd.io.common.file_exists(csv_path), index=False)
-            logging.info(f"[REPORTING] Report appended to {csv_path}")
+            import os
+            file_exists = os.path.isfile(csv_path)
+            report_df.to_csv(csv_path, mode='a', header=not file_exists, index=False)
+            logging.info(f"[REPORTING] Report {'appended to' if file_exists else 'created in'} {csv_path}")
             
             # Save to daily_reports.xlsx (append mode - all reports in one sheet)
             xlsx_path = "/opt/airflow/data/processed/daily_reports.xlsx"
             try:
                 # Try to read existing Excel and append
-                existing_df = pd.read_excel(xlsx_path)
+                existing_df = pd.read_excel(xlsx_path, engine='openpyxl')
                 combined_df = pd.concat([existing_df, report_df], ignore_index=True)
                 combined_df.to_excel(xlsx_path, index=False, engine='openpyxl')
-                logging.info(f"[REPORTING] Report appended to {xlsx_path}")
+                logging.info(f"[REPORTING] Report appended to {xlsx_path} (now {len(combined_df)} total reports)")
             except FileNotFoundError:
-                # Create new Excel file
+                # Create new Excel file if it doesn't exist
                 report_df.to_excel(xlsx_path, index=False, engine='openpyxl')
-                logging.info(f"[REPORTING] Created new {xlsx_path}")
+                logging.info(f"[REPORTING] Created new {xlsx_path} with first report")
+            except Exception as e:
+                logging.error(f"[REPORTING] Failed to save Excel report: {e}")
+                # Continue anyway - CSV was already saved
             
             return report_data
             

@@ -28,6 +28,13 @@ An automated ETL (Extract, Transform, Load) pipeline built with Apache Airflow f
 - ✅ **T0021**: Upsert logic for insert-or-skip based on primary keys
 - ✅ **T0022**: Reject table for failed records with error context logging
 
+### DAG Orchestration & Workflow Management (T0023-T0027)
+- ✅ **T0023**: Master orchestrator DAG for centralized pipeline coordination
+- ✅ **T0024**: Event-driven triggering with FileSensor (waits for data file arrival)
+- ✅ **T0025**: Multi-DAG dependency management with ExternalTaskSensor
+- ✅ **T0026**: Backfill & catchup features for historical data processing
+- ✅ **T0027**: Comprehensive failure handling (3 retries, exponential backoff, custom callbacks)
+
 ## Data Transformations (Amazon Orders)
 
 1. **Empty/Whitespace Handling**: Converts empty strings to NaN (T0008)
