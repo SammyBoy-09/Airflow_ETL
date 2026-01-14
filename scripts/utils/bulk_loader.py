@@ -1,6 +1,7 @@
-# ========================================
-# TEAM 1 - T0018: Implement bulk load utility
-# ========================================
+# ═══════════════════════════════════════════════════════════════════════
+# TEAM 1 - SPRINT 4: Bulk Loader Utility
+# Tasks: T0018
+# ═══════════════════════════════════════════════════════════════════════
 
 """
 Bulk Load Utility - High-performance batch database loading
@@ -100,6 +101,9 @@ class BulkLoader:
             self.engine = None
             logger.info("✅ Database connection closed")
     
+    # ========================================
+    # Team 1 - T0018: Bulk Load Operations
+    # ========================================
     def bulk_load(self,
                   df: pd.DataFrame,
                   table_name: str,

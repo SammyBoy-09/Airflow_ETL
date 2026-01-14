@@ -1,0 +1,55 @@
+{
+  "orchestrator_run_id": "manual__2026-01-14T14:23:59.011530+00:00",
+  "execution_date": "2026-01-14 14:23:59.011530+00:00",
+  "total_duration_seconds": 105.67384999999999,
+  "stages": [
+    {
+      "stage": "Stage1_Independent",
+      "duration_seconds": 34.185275,
+      "duration_formatted": "34.19s"
+    },
+    {
+      "stage": "Stage2_Sales",
+      "duration_seconds": 36.231964,
+      "duration_formatted": "36.23s"
+    },
+    {
+      "stage": "Stage3_Reports",
+      "duration_seconds": 35.256611,
+      "duration_formatted": "35.26s"
+    }
+  ],
+  "dag_statuses": [
+    {
+      "dag_id": "etl_customers",
+      "status": "SUCCESS",
+      "last_execution": "2026-01-14T14:24:03.483508+00:00"
+    },
+    {
+      "dag_id": "etl_products",
+      "status": "SUCCESS",
+      "last_execution": "2026-01-14T14:24:03.484630+00:00"
+    },
+    {
+      "dag_id": "etl_stores",
+      "status": "SUCCESS",
+      "last_execution": "2026-01-14T14:24:03.485266+00:00"
+    },
+    {
+      "dag_id": "etl_exchange_rates",
+      "status": "SUCCESS",
+      "last_execution": "2026-01-14T14:24:03.483599+00:00"
+    },
+    {
+      "dag_id": "etl_sales",
+      "status": "SUCCESS",
+      "last_execution": "2026-01-14T14:24:38.842948+00:00"
+    },
+    {
+      "dag_id": "etl_reports",
+      "status": "SUCCESS",
+      "last_execution": "2026-01-14T14:25:15.891195+00:00"
+    }
+  ],
+  "generated_at": "2026-01-14T14:25:51.267351"
+}

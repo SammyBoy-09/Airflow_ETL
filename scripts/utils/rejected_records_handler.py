@@ -1,6 +1,7 @@
-# ========================================
-# TEAM 1 - T0022: Create rejected_records error table
-# ========================================
+# ═══════════════════════════════════════════════════════════════════════
+# TEAM 1 - SPRINT 4: Rejected Records Handler
+# Tasks: T0022
+# ═══════════════════════════════════════════════════════════════════════
 
 """
 Rejected Records Handler - Track and store failed records
@@ -122,6 +123,9 @@ class RejectedRecordsHandler:
             self.engine.dispose()
             self.engine = None
     
+    # ========================================
+    # Team 1 - T0022: Error Table Creation (Rejects)
+    # ========================================
     def ensure_table_exists(self) -> bool:
         """
         Create rejected_records table if it doesn't exist

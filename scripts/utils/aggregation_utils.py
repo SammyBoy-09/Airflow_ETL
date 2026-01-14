@@ -1,4 +1,7 @@
-############# T0013: Aggregations (groupBy, sum, min, max) #############
+# ═══════════════════════════════════════════════════════════════════════
+# TEAM 1 - SPRINT 3: Aggregation Utilities
+# Tasks: T0013
+# ═══════════════════════════════════════════════════════════════════════
 
 """
 Aggregation Utilities - Data Aggregation and Grouping Operations
@@ -26,6 +29,9 @@ class AggregationEngine:
     Performs data aggregations with flexible grouping and output options
     """
     
+    # ========================================
+    # Team 1 - T0013: Aggregations (groupBy, sum, min, max)
+    # ========================================
     @staticmethod
     def aggregate(df: pd.DataFrame,
                   group_by: Union[str, List[str]],

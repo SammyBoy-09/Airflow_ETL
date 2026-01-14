@@ -1,6 +1,7 @@
-# ========================================
-# TEAM 1 - T0019: Build incremental load strategy
-# ========================================
+# ═══════════════════════════════════════════════════════════════════════
+# TEAM 1 - SPRINT 4: Load Strategy Utility
+# Tasks: T0019
+# ═══════════════════════════════════════════════════════════════════════
 
 """
 Load Strategy Utility - Full vs Incremental Loading
@@ -111,6 +112,9 @@ class LoadStrategy:
             self.engine.dispose()
             self.engine = None
     
+    # ========================================
+    # Team 1 - T0019: Incremental vs Full Loads
+    # ========================================
     def determine_load_type(self,
                             table_name: str,
                             force_full: bool = False,

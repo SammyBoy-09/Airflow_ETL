@@ -1,4 +1,7 @@
-############# T0016: Date/Time Transformations #############
+# ═══════════════════════════════════════════════════════════════════════
+# TEAM 1 - SPRINT 3: DateTime Utilities
+# Tasks: T0016
+# ═══════════════════════════════════════════════════════════════════════
 
 """
 DateTime Transformation Utilities - Date feature extraction and intervals
@@ -24,6 +27,9 @@ class DateTimeEngine:
     Date/time feature extraction and interval calculations
     """
     
+    # ========================================
+    # Team 1 - T0016: Date/Time Transformations (date parts)
+    # ========================================
     @staticmethod
     def extract_date_parts(df: pd.DataFrame,
                           date_col: str,
@@ -60,6 +66,9 @@ class DateTimeEngine:
         logger.info(f"✅ Extracted date parts for {date_col}")
         return df_new
     
+    # ========================================
+    # Team 1 - T0016: Date/Time Transformations (intervals)
+    # ========================================
     @staticmethod
     def days_between(df: pd.DataFrame,
                     start_col: str,

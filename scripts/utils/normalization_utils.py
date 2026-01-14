@@ -1,6 +1,7 @@
-# ========================================
-# TEAM 1 - T0014: Normalization & Scaling
-# ========================================
+# ═══════════════════════════════════════════════════════════════════════
+# TEAM 1 - SPRINT 3: Normalization Utilities
+# Tasks: T0014
+# ═══════════════════════════════════════════════════════════════════════
 
 """
 Normalization Utilities - Data Normalization and Scaling
@@ -30,6 +31,9 @@ class NormalizationEngine:
     Focus on Z-score standardization as per requirements
     """
     
+    # ========================================
+    # Team 1 - T0014: Normalization & Scaling (Z-score)
+    # ========================================
     @staticmethod
     def z_score_normalize(df: pd.DataFrame,
                          columns: Optional[List[str]] = None,

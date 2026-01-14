@@ -1,4 +1,7 @@
-############# T0017: Transformation Orchestrator #############
+# ═══════════════════════════════════════════════════════════════════════
+# TEAM 1 - SPRINT 3: Transformation Orchestrator
+# Tasks: T0017
+# ═══════════════════════════════════════════════════════════════════════
 
 """
 Transformation Orchestrator - Unified pipeline orchestration
@@ -20,11 +23,11 @@ from pathlib import Path
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 
-# Import utility engines
-from aggregation_utils import AggregationEngine
-from normalization_utils import NormalizationEngine
-from feature_engineering_utils import FeatureEngine
-from datetime_utils import DateTimeEngine
+# Import utility engines (relative imports for package)
+from .aggregation_utils import AggregationEngine
+from .normalization_utils import NormalizationEngine
+from .feature_engineering_utils import FeatureEngine
+from .datetime_utils import DateTimeEngine
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +76,9 @@ class TransformationOrchestrator:
         logger.info(f"✅ Loaded config from {self.config_path}")
         return config
     
+    # ========================================
+    # Team 1 - T0017: Transformation Orchestrator (pipeline)
+    # ========================================
     def run(self,
             source: str,
             data_path: str,

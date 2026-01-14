@@ -111,6 +111,16 @@ services:
       AIRFLOW__WEBSERVER__WORKERS: "2"
       AIRFLOW__WEBSERVER__RBAC: "True"
       AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+      # Email/SMTP Configuration
+      AIRFLOW__SMTP__SMTP_HOST: "${SMTP_HOST:-smtp.gmail.com}"
+      AIRFLOW__SMTP__SMTP_PORT: "${SMTP_PORT:-587}"
+      AIRFLOW__SMTP__SMTP_USER: "${SMTP_USER}"
+      AIRFLOW__SMTP__SMTP_PASSWORD: "${SMTP_PASSWORD}"
+      AIRFLOW__SMTP__SMTP_MAIL_FROM: "${SMTP_MAIL_FROM}"
+      AIRFLOW__SMTP__SMTP_STARTTLS: "True"
+      AIRFLOW__SMTP__SMTP_SSL: "False"
+      # Timezone
+      AIRFLOW__CORE__DEFAULT_TIMEZONE: "Asia/Kolkata"
       _PIP_ADDITIONAL_REQUIREMENTS: "openpyxl pandas sqlalchemy psycopg2-binary pyyaml"
       AIRFLOW_UID: "${AIRFLOW_UID}"
       PYTHONUNBUFFERED: "1"
@@ -147,6 +157,16 @@ services:
       AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY}
       AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+      # Email/SMTP Configuration
+      AIRFLOW__SMTP__SMTP_HOST: "${SMTP_HOST:-smtp.gmail.com}"
+      AIRFLOW__SMTP__SMTP_PORT: "${SMTP_PORT:-587}"
+      AIRFLOW__SMTP__SMTP_USER: "${SMTP_USER}"
+      AIRFLOW__SMTP__SMTP_PASSWORD: "${SMTP_PASSWORD}"
+      AIRFLOW__SMTP__SMTP_MAIL_FROM: "${SMTP_MAIL_FROM}"
+      AIRFLOW__SMTP__SMTP_STARTTLS: "True"
+      AIRFLOW__SMTP__SMTP_SSL: "False"
+      # Timezone
+      AIRFLOW__CORE__DEFAULT_TIMEZONE: "Asia/Kolkata"
       _PIP_ADDITIONAL_REQUIREMENTS: "openpyxl pandas sqlalchemy psycopg2-binary pyyaml"
       AIRFLOW_UID: "${AIRFLOW_UID}"
       PYTHONUNBUFFERED: "1"

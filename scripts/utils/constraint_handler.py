@@ -1,6 +1,7 @@
-# ========================================
-# TEAM 1 - T0020: Create constraint violation handler
-# ========================================
+# ═══════════════════════════════════════════════════════════════════════
+# TEAM 1 - SPRINT 4: Constraint Handler
+# Tasks: T0020
+# ═══════════════════════════════════════════════════════════════════════
 
 """
 Constraint Violation Handler - Handle database constraint errors gracefully
@@ -153,6 +154,9 @@ class ConstraintHandler:
             self.engine.dispose()
             self.engine = None
     
+    # ========================================
+    # Team 1 - T0020: Handling Constraint Violations
+    # ========================================
     def validate_before_load(self,
                              df: pd.DataFrame,
                              table_name: str,

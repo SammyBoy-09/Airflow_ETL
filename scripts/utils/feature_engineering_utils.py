@@ -1,4 +1,7 @@
-############# T0015: Feature Engineering Logic #############
+# ═══════════════════════════════════════════════════════════════════════
+# TEAM 1 - SPRINT 3: Feature Engineering Utilities
+# Tasks: T0015
+# ═══════════════════════════════════════════════════════════════════════
 
 """
 Feature Engineering Utilities - Create New Features from Existing Data
@@ -27,6 +30,9 @@ class FeatureEngine:
     
     ############# CUSTOMER FEATURES #############
     
+    # ========================================
+    # Team 1 - T0015: Feature Engineering (customer features)
+    # ========================================
     @staticmethod
     def create_customer_features(customers_df: pd.DataFrame,
                                  sales_df: pd.DataFrame,

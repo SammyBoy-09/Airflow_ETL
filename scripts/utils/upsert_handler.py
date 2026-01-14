@@ -1,6 +1,7 @@
-# ========================================
-# TEAM 1 - T0021: Build upsert (insert/update) logic
-# ========================================
+# ═══════════════════════════════════════════════════════════════════════
+# TEAM 1 - SPRINT 4: Upsert Handler
+# Tasks: T0021
+# ═══════════════════════════════════════════════════════════════════════
 
 """
 Upsert Handler - Insert or Update records based on primary key
@@ -101,6 +102,9 @@ class UpsertHandler:
             self.engine.dispose()
             self.engine = None
     
+    # ========================================
+    # Team 1 - T0021: Upsert Logic (Insert/Update)
+    # ========================================
     def upsert(self,
                df: pd.DataFrame,
                table_name: str,

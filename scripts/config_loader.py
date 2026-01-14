@@ -1,3 +1,23 @@
+# ═══════════════════════════════════════════════════════════════════════
+# TEAM 1 - SPRINT 1 & 2: Configuration Loader
+# Tasks: T0006, T0012
+# ═══════════════════════════════════════════════════════════════════════
+
+"""
+config_loader.py - YAML/JSON Configuration Loader
+
+TASKS IMPLEMENTED:
+- T0006: Build starter config loader (YAML/JSON)
+- T0012: Build config-driven cleaning rules (loads cleaning configs)
+
+Methods:
+- load_yaml(): Load YAML configuration files
+- load_json(): Load JSON configuration files
+
+Usage:
+    config = ConfigLoader.load_yaml('config/customers_config.yaml')
+"""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -31,6 +51,9 @@ class ConfigLoader:
             raise FileNotFoundError(f"Config path is not a file: {p}")
         return p
 
+    # ========================================
+    # Team 1 - T0012: Config-driven cleaning rules (YAML loader)
+    # ========================================
     @staticmethod
     def load_yaml(path: PathLike) -> dict[str, Any]:
         """Load a YAML file and return a dictionary.

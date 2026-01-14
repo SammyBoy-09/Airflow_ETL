@@ -1,4 +1,7 @@
-############# TEAM 1 - T0031: Pipeline Execution Summary #############
+# ═══════════════════════════════════════════════════════════════════════
+# TEAM 1 - SPRINT 6: DAG Execution Tracker
+# Tasks: T0031
+# ═══════════════════════════════════════════════════════════════════════
 
 """
 DAG Execution Metadata Tracker

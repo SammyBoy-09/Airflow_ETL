@@ -1,0 +1,68 @@
+StoreKey,Country,State,Square Meters,Open Date,Total_Orders,Total_Quantity
+1,Australia,Australian Capital Territory,595,1/1/2008,111.0,362.0
+2,Australia,Northern Territory,665,1/12/2008,4.0,13.0
+3,Australia,South Australia,2000,1/7/2012,,
+4,Australia,Tasmania,2000,1/1/2010,174.0,525.0
+5,Australia,Victoria,2000,12/9/2015,371.0,1229.0
+6,Australia,Western Australia,2000,1/1/2010,241.0,756.0
+7,Canada,New Brunswick,1105,5/7/2007,,
+8,Canada,Newfoundland and Labrador,2105,7/2/2014,583.0,1727.0
+9,Canada,Northwest Territories,1500,3/4/2005,658.0,2069.0
+10,Canada,Nunavut,1210,4/4/2015,528.0,1621.0
+11,Canada,Yukon,1210,6/3/2009,,
+12,France,Basse-Normandie,350,6/6/2012,90.0,305.0
+13,France,Corse,245,6/7/2013,80.0,281.0
+14,France,Franche-Comté,350,12/15/2009,57.0,155.0
+15,France,La Réunion,400,1/1/2015,93.0,293.0
+16,France,Limousin,385,6/3/2010,91.0,273.0
+17,France,Martinique,350,7/8/2007,79.0,228.0
+18,France,Mayotte,310,8/8/2012,81.0,252.0
+19,Germany,Berlin,1295,4/4/2015,265.0,828.0
+20,Germany,Brandenburg,1715,12/15/2012,183.0,633.0
+21,Germany,Freie Hansestadt Bremen,560,6/3/2018,165.0,600.0
+22,Germany,Freistaat Thüringen,2000,3/6/2008,334.0,1003.0
+23,Germany,Hamburg,1365,1/1/2010,274.0,910.0
+24,Germany,Hessen,1855,12/15/2012,295.0,983.0
+25,Germany,Mecklenburg-Vorpommern,1610,1/1/2010,,
+26,Germany,Saarland,350,3/5/2019,103.0,361.0
+27,Germany,Sachsen-Anhalt,2000,8/8/2008,283.0,869.0
+28,Italy,Caltanissetta,1200,12/15/2012,82.0,260.0
+29,Italy,Enna,1000,1/1/2008,417.0,1261.0
+30,Italy,Pesaro,2100,1/12/2008,391.0,1223.0
+31,Netherlands,Drenthe,1085,1/7/2012,176.0,583.0
+32,Netherlands,Flevoland,910,1/1/2010,196.0,641.0
+33,Netherlands,Friesland,1540,12/9/2015,208.0,673.0
+34,Netherlands,Groningen,1365,1/1/2010,196.0,644.0
+35,Netherlands,Zeeland,1225,5/7/2007,,
+36,UK,Armagh,1300,7/2/2014,453.0,1376.0
+37,UK,Ayrshire,2100,3/4/2005,400.0,1195.0
+38,UK,Belfast,1800,4/4/2015,432.0,1334.0
+39,UK,Blaenau Gwent,2100,6/3/2009,445.0,1398.0
+40,UK,Dungannon and South Tyrone,1300,6/6/2012,442.0,1372.0
+41,UK,Fermanagh,2100,6/7/2013,173.0,567.0
+42,UK,North Down,1900,12/15/2009,439.0,1360.0
+43,USA,Alaska,1190,1/1/2015,558.0,1687.0
+44,USA,Arkansas,2000,6/3/2010,606.0,1871.0
+45,USA,Connecticut,2000,7/8/2007,617.0,1965.0
+46,USA,Delaware,1015,8/8/2012,,
+47,USA,Hawaii,1120,4/4/2015,582.0,1789.0
+48,USA,Idaho,1540,12/15/2012,539.0,1625.0
+49,USA,Iowa,2000,6/3/2018,441.0,1445.0
+50,USA,Kansas,2000,3/6/2008,605.0,1911.0
+51,USA,Maine,1295,1/1/2010,581.0,1709.0
+52,USA,Mississippi,2000,6/3/2009,,
+53,USA,Montana,1260,6/6/2012,534.0,1654.0
+54,USA,Nebraska,2000,6/7/2013,629.0,1998.0
+55,USA,Nevada,2000,12/15/2009,622.0,1975.0
+56,USA,New Hampshire,1260,1/1/2015,525.0,1671.0
+57,USA,New Mexico,1645,6/3/2010,605.0,1824.0
+58,USA,North Dakota,1330,7/8/2007,,
+59,USA,Oregon,2000,8/8/2012,619.0,1981.0
+60,USA,Rhode Island,1260,4/4/2005,,
+61,USA,South Carolina,2000,12/15/2012,624.0,1971.0
+62,USA,South Dakota,1120,6/3/2018,346.0,1090.0
+63,USA,Utah,2000,3/6/2008,413.0,1256.0
+64,USA,Washington DC,1330,1/1/2010,566.0,1794.0
+65,USA,West Virginia,1785,1/1/2012,596.0,1936.0
+66,USA,Wyoming,840,1/1/2014,545.0,1703.0
+0,Online,Online,0,1/1/2010,5580.0,17677.0

@@ -1,3 +1,29 @@
+# ═══════════════════════════════════════════════════════════════════════
+# TEAM 1 - SPRINT 2: Data Cleaning Utilities
+# Tasks: T0008-T0011
+# ═══════════════════════════════════════════════════════════════════════
+
+"""
+cleaning_utils.py - Reusable Data Cleaning Utilities
+
+TASKS IMPLEMENTED:
+- T0008: Build reusable cleaning utilities (trim, fillna, typecast)
+- T0009: Handle incorrect data types
+- T0010: Duplicate data detection & removal
+- T0011: Missing data handling strategies (mean, regression, drop)
+
+Methods:
+- trim_whitespace(): Remove leading/trailing spaces
+- fill_missing_mean(): Fill with column mean
+- fill_missing_median(): Fill with column median
+- fill_missing_mode(): Fill with mode
+- fill_missing_forward(): Forward fill
+- fill_missing_backward(): Backward fill
+- drop_missing(): Drop rows with missing values
+- typecast(): Convert data types
+- remove_duplicates(): Remove duplicate rows
+"""
+
 from __future__ import annotations
 
 import pandas as pd
@@ -12,6 +38,9 @@ class DataCleaner:
     of cleaning operations.
     """
 
+    # ========================================
+    # Team 1 - T0008: Build reusable cleaning utilities (trim)
+    # ========================================
     @staticmethod
     def trim_whitespace(df: pd.DataFrame) -> pd.DataFrame:
         """Trim leading/trailing whitespace from all string columns.
@@ -29,6 +58,9 @@ class DataCleaner:
                 df[col] = df[col].str.strip()
         return df
 
+    # ========================================
+    # Team 1 - T0011: Missing data handling (mean fill)
+    # ========================================
     @staticmethod
     def fill_missing_mean(
         df: pd.DataFrame, columns: list[str] | None = None
@@ -50,6 +82,9 @@ class DataCleaner:
                 df[col] = df[col].fillna(df[col].mean())
         return df
 
+    # ========================================
+    # Team 1 - T0011: Missing data handling (median fill)
+    # ========================================
     @staticmethod
     def fill_missing_median(
         df: pd.DataFrame, columns: list[str] | None = None
@@ -71,6 +106,9 @@ class DataCleaner:
                 df[col] = df[col].fillna(df[col].median())
         return df
 
+    # ========================================
+    # Team 1 - T0010: Duplicate data detection & removal
+    # ========================================
     @staticmethod
     def remove_duplicates(
         df: pd.DataFrame,
@@ -89,6 +127,9 @@ class DataCleaner:
         """
         return df.drop_duplicates(subset=subset, keep=keep)
 
+    # ========================================
+    # Team 1 - T0008: Build reusable cleaning utilities (typecast)
+    # ========================================
     @staticmethod
     def typecast_column(
         df: pd.DataFrame, column: str, dtype: str
@@ -117,6 +158,9 @@ class DataCleaner:
                 df[column] = df[column].astype(dtype)
         return df
 
+    # ========================================
+    # Team 1 - T0009: Handle incorrect data types (email validation)
+    # ========================================
     @staticmethod
     def validate_email(
         df: pd.DataFrame,
@@ -150,6 +194,9 @@ class DataCleaner:
 
         return df
 
+    # ========================================
+    # Team 1 - T0008: Build reusable cleaning utilities (empty strings)
+    # ========================================
     @staticmethod
     def remove_empty_strings(df: pd.DataFrame) -> pd.DataFrame:
         """Convert empty strings and whitespace-only strings to NaN.

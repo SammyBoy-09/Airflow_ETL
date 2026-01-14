@@ -1,5 +1,7 @@
-############# T0008: Build Reusable Cleaning Utilities #############
-############# Validation Component #############
+# ═══════════════════════════════════════════════════════════════════════
+# TEAM 1 - SPRINT 2: Data Validation Utilities
+# Tasks: T0008, T0012
+# ═══════════════════════════════════════════════════════════════════════
 
 """
 Validation Utilities - Data Type Detection & Quality Validation
@@ -27,6 +29,9 @@ logger = logging.getLogger(__name__)
 class DataValidator:
     """Reusable data validation utilities"""
     
+    # ========================================
+    # Team 1 - T0009: Handle incorrect data types (detection)
+    # ========================================
     @staticmethod
     def detect_data_types(df: pd.DataFrame) -> Dict[str, str]:
         """
@@ -77,12 +82,18 @@ class DataValidator:
         
         return type_map
     
+    # ========================================
+    # Team 1 - T0009: Handle incorrect data types (email validation)
+    # ========================================
     @staticmethod
     def validate_email(email: str) -> bool:
         """Validate email format"""
         pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
         return bool(re.match(pattern, str(email)))
     
+    # ========================================
+    # Team 1 - T0012: Config-driven cleaning rules (null validation)
+    # ========================================
     @staticmethod
     def validate_column_nulls(df: pd.DataFrame, column: str, allow_null: bool = False) -> Tuple[bool, Dict[str, Any]]:
         """
@@ -103,6 +114,9 @@ class DataValidator:
             'total_rows': len(df)
         }
     
+    # ========================================
+    # Team 1 - T0009: Handle incorrect data types (type matching)
+    # ========================================
     @staticmethod
     def validate_type_match(series: pd.Series, expected_type: str) -> Tuple[bool, Dict[str, Any]]:
         """
