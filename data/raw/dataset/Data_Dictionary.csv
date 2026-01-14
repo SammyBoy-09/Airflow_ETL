@@ -18,6 +18,8 @@ Customers,Zip Code,Customer zip code
 Customers,Country,Customer country
 Customers,Continent,Customer continent
 Customers,Birthday,Customer date of birth
+Customers,Age,Customer age calculated from birthday (may contain missing values or typecast format)
+Customers,Email,Customer email address (Gmail format with possible missing values or duplicates)
 Products,ProductKey,Primary key to identify products
 Products,Product Name,Product name
 Products,Brand,Product brand

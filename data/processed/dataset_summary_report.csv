@@ -1,2 +1,0 @@
-Report Date,Report Type,Total Customers (with duplicates),Unique Customers,Duplicate Customer Rows,Total Sales Records,Total Products,Total Stores,Exchange Rate Records,Data Quality Issues,Status
-2026-01-06 11:25:17,Relational Dataset Analysis,16029,15266,763,62884,2517,67,11215,"Duplicate rows, Missing Age/Email, Typecast Age, Mixed Birthday formats, Pending Deliveries",Ready for ETL Pipeline
