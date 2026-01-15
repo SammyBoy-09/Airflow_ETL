@@ -76,22 +76,34 @@ def transform_customers(**context):
     # Read from staging
     df = pd.read_csv(staging_file)
     initial_rows = len(df)
+    rejected_records = []
     
     # ========================================
     # Team 1 - T0010: Duplicate data detection & removal
     # ========================================
+    duplicates = df[df.duplicated(subset=['CustomerKey'], keep='first')]
+    for _, row in duplicates.iterrows():
+        rejected_records.append({
+            'table': 'customers',
+            'record_id': str(row.get('CustomerKey', '')),
+            'reason': 'duplicate',
+            'original_data': row.to_json()
+        })
     df = df.drop_duplicates(subset=['CustomerKey'], keep='first')
     duplicates_removed = initial_rows - len(df)
     
     # ========================================
     # Team 1 - T0009: Handle incorrect data types (birthday)
+    # Birthday: Replace empty values with placeholder date
     # ========================================
     if 'Birthday' in df.columns:
         df['Birthday'] = pd.to_datetime(df['Birthday'], errors='coerce')
+        # Replace NaT (null) with placeholder date 1900-01-01
+        df['Birthday'] = df['Birthday'].fillna(pd.Timestamp('1900-01-01'))
     
     # ========================================
     # Team 1 - T0008: Build reusable cleaning utilities (typecast)
-    # Team 1 - T0011: Missing data handling (mean fill)
+    # Team 1 - T0011: Missing data handling (mean fill for Age)
     # ========================================
     if 'Age' in df.columns:
         df['Age'] = pd.to_numeric(df['Age'], errors='coerce')
@@ -99,38 +111,69 @@ def transform_customers(**context):
         df['Age'] = df['Age'].fillna(mean_age).astype(int)
     
     # ========================================
-    # Team 1 - T0009: Handle incorrect data types (email validation)
+    # Email Validation: Remove invalid emails and track rejections
     # ========================================
     if 'Email' in df.columns:
         email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
         
-        def validate_email(email):
-            if pd.isna(email):
-                return 'no-email@unknown.com'
-            if re.match(email_pattern, str(email)):
-                return email
-            return 'invalid-email@unknown.com'
+        def is_valid_email(email):
+            if pd.isna(email) or email == '':
+                return False
+            return bool(re.match(email_pattern, str(email)))
         
-        df['Email'] = df['Email'].apply(validate_email)
+        # Track invalid emails for rejection
+        invalid_email_mask = ~df['Email'].apply(is_valid_email)
+        invalid_emails = df[invalid_email_mask]
+        for _, row in invalid_emails.iterrows():
+            rejected_records.append({
+                'table': 'customers',
+                'record_id': str(row.get('CustomerKey', '')),
+                'reason': 'invalid_email',
+                'original_data': row.to_json()
+            })
+        
+        # Remove records with invalid emails
+        df = df[~invalid_email_mask]
+        print(f"   Removed {len(invalid_emails)} records with invalid emails")
+    
+    # ========================================
+    # Customer Loyalty Categorization
+    # Based on Age: Premium (50+), Standard (30-49), Basic (<30)
+    # ========================================
+    def categorize_loyalty(age):
+        if pd.isna(age):
+            return 'Unknown'
+        if age >= 50:
+            return 'Premium'
+        elif age >= 30:
+            return 'Standard'
+        else:
+            return 'Basic'
+    
+    df['loyalty_category'] = df['Age'].apply(categorize_loyalty)
     
     # Save cleaned data
     df.to_csv(output_file, index=False)
     
     print(f"✅ Transformed customers: {initial_rows:,} → {len(df):,} rows")
     print(f"   Duplicates removed: {duplicates_removed}")
+    print(f"   Total rejected: {len(rejected_records)}")
     
     context['ti'].xcom_push(key='output_file', value=output_file)
     context['ti'].xcom_push(key='cleaned_rows', value=len(df))
+    context['ti'].xcom_push(key='rejected_records', value=rejected_records)
     
-    return {'rows': len(df), 'file': output_file}
+    return {'rows': len(df), 'file': output_file, 'rejected': len(rejected_records)}
 
 
 def load_customers(**context):
     """Load customers to PostgreSQL"""
     import pandas as pd
     from sqlalchemy import create_engine, text
+    from datetime import datetime
     
     output_file = context['ti'].xcom_pull(key='output_file', task_ids='transform')
+    rejected_records = context['ti'].xcom_pull(key='rejected_records', task_ids='transform') or []
     
     # Read cleaned data
     df = pd.read_csv(output_file)
@@ -146,13 +189,75 @@ def load_customers(**context):
         except Exception:
             pass  # Schema already exists
         conn.execute(text("DROP TABLE IF EXISTS etl_output.customers"))
+        
+        # Create rejected_records table if not exists (append-only)
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS etl_output.rejected_records (
+                id SERIAL PRIMARY KEY,
+                table_name VARCHAR(100),
+                record_id VARCHAR(100),
+                reason VARCHAR(100),
+                original_data TEXT,
+                rejected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                dag_run_id VARCHAR(255)
+            )
+        """))
+        
+        # Create dag_run_summary table if not exists (append-only)
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS etl_output.dag_run_summary (
+                id SERIAL PRIMARY KEY,
+                dag_id VARCHAR(100),
+                run_id VARCHAR(255),
+                execution_date TIMESTAMP,
+                table_name VARCHAR(100),
+                rows_extracted INT,
+                rows_loaded INT,
+                rows_rejected INT,
+                status VARCHAR(50),
+                completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
     
-    # Load to database
+    # Load customers to database
     df.to_sql(
         'customers',
         engine,
         schema='etl_output',
         if_exists='replace',
+        index=False
+    )
+    
+    # Save rejected records (append)
+    if rejected_records:
+        rejected_df = pd.DataFrame(rejected_records)
+        rejected_df['dag_run_id'] = context['run_id']
+        rejected_df.rename(columns={'table': 'table_name'}, inplace=True)
+        rejected_df.to_sql(
+            'rejected_records',
+            engine,
+            schema='etl_output',
+            if_exists='append',
+            index=False
+        )
+        print(f"   Saved {len(rejected_records)} rejected records")
+    
+    # Save dag run summary (append)
+    run_summary = pd.DataFrame([{
+        'dag_id': 'etl_customers',
+        'run_id': context['run_id'],
+        'execution_date': str(context['logical_date']),
+        'table_name': 'customers',
+        'rows_extracted': context['ti'].xcom_pull(key='row_count', task_ids='extract'),
+        'rows_loaded': len(df),
+        'rows_rejected': len(rejected_records),
+        'status': 'success'
+    }])
+    run_summary.to_sql(
+        'dag_run_summary',
+        engine,
+        schema='etl_output',
+        if_exists='append',
         index=False
     )
     

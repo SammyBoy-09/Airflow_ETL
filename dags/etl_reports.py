@@ -54,7 +54,7 @@ def get_latest_execution_date(dt, external_dag_id):
 from dag_base import (
     DEFAULT_ARGS, SCHEDULE_MIDNIGHT_IST, START_DATE,
     send_success_email, send_failure_email,
-    DATA_PROCESSED, get_connection_string
+    DATA_RAW, DATA_PROCESSED, get_connection_string
 )
 
 
@@ -77,12 +77,15 @@ def generate_all_reports(**context):
     
     reports_generated = []
     
-    # Load all tables
+    # Load all tables from database
     customers = pd.read_sql("SELECT * FROM etl_output.customers", engine)
     products = pd.read_sql("SELECT * FROM etl_output.products", engine)
     stores = pd.read_sql("SELECT * FROM etl_output.stores", engine)
     sales = pd.read_sql("SELECT * FROM etl_output.sales", engine)
     exchange_rates = pd.read_sql("SELECT * FROM etl_output.exchange_rates", engine)
+    
+    # Load raw customer data for filling missing info (rejected customers)
+    raw_customers = pd.read_csv(f'{DATA_RAW}/Customers.csv')
     
     print(f"📊 Loaded tables for reporting:")
     print(f"   Customers: {len(customers):,}")
@@ -156,11 +159,30 @@ def generate_all_reports(**context):
             'Quantity': 'sum'
         }).reset_index()
         customer_sales.columns = ['CustomerKey', 'Total_Orders', 'Total_Items']
+        
+        # First merge with cleaned customers
         report6 = customer_sales.merge(customers[['CustomerKey', 'Name', 'Country']], on='CustomerKey', how='left')
-        report6 = report6.sort_values('Total_Items', ascending=False).head(100)
+        
+        # For missing values (rejected customers), fill from raw data
+        missing_mask = report6['Name'].isna()
+        if missing_mask.any():
+            raw_cust_subset = raw_customers[['CustomerKey', 'Name', 'Country']].drop_duplicates(subset='CustomerKey')
+            missing_keys = report6.loc[missing_mask, 'CustomerKey'].tolist()
+            raw_fill = raw_cust_subset[raw_cust_subset['CustomerKey'].isin(missing_keys)]
+            
+            for _, row in raw_fill.iterrows():
+                mask = report6['CustomerKey'] == row['CustomerKey']
+                report6.loc[mask, 'Name'] = row['Name'] if pd.notna(row['Name']) else 'Unknown'
+                report6.loc[mask, 'Country'] = row['Country'] if pd.notna(row['Country']) else 'Unknown'
+            
+            # Fill any remaining nulls
+            report6['Name'] = report6['Name'].fillna('Unknown')
+            report6['Country'] = report6['Country'].fillna('Unknown')
+        
+        report6 = report6.sort_values('Total_Items', ascending=False)
         report6.to_csv(f'{reports_dir}/customer_purchase_analysis.csv', index=False)
         reports_generated.append('customer_purchase_analysis.csv')
-        print(f"✅ Report 6: Top 100 Customers by Purchase")
+        print(f"✅ Report 6: Customer Purchase Analysis ({len(report6):,} customers)")
     
     # ===== REPORT 7: Monthly Sales Trend =====
     if 'Order Date' in sales.columns:
@@ -195,6 +217,36 @@ def generate_all_reports(**context):
         report9.to_csv(f'{reports_dir}/exchange_rate_summary.csv', index=False)
         reports_generated.append('exchange_rate_summary.csv')
         print(f"✅ Report 9: Exchange Rate Summary ({len(report9)} currencies)")
+    
+    # ===== REPORT 10: Rejected Records Summary =====
+    try:
+        rejected_records = pd.read_sql("SELECT * FROM etl_output.rejected_records", engine)
+        if len(rejected_records) > 0:
+            # Summary by table and reason
+            report10_summary = rejected_records.groupby(['table_name', 'reason']).size().reset_index(name='count')
+            report10_summary = report10_summary.sort_values('count', ascending=False)
+            report10_summary.to_csv(f'{reports_dir}/rejected_records_summary.csv', index=False)
+            reports_generated.append('rejected_records_summary.csv')
+            
+            # Full rejected records (without original_data to keep file size manageable)
+            report10_detail = rejected_records[['table_name', 'record_id', 'reason', 'rejected_at', 'dag_run_id']]
+            report10_detail = report10_detail.sort_values('rejected_at', ascending=False)
+            report10_detail.to_csv(f'{reports_dir}/rejected_records_detail.csv', index=False)
+            reports_generated.append('rejected_records_detail.csv')
+            print(f"✅ Report 10: Rejected Records ({len(rejected_records):,} records)")
+    except Exception as e:
+        print(f"⚠️ Report 10: Rejected Records skipped - {e}")
+    
+    # ===== REPORT 11: DAG Run Summary =====
+    try:
+        dag_run_summary = pd.read_sql("SELECT * FROM etl_output.dag_run_summary", engine)
+        if len(dag_run_summary) > 0:
+            dag_run_summary = dag_run_summary.sort_values('execution_date', ascending=False)
+            dag_run_summary.to_csv(f'{reports_dir}/dag_run_summary.csv', index=False)
+            reports_generated.append('dag_run_summary.csv')
+            print(f"✅ Report 11: DAG Run Summary ({len(dag_run_summary):,} runs)")
+    except Exception as e:
+        print(f"⚠️ Report 11: DAG Run Summary skipped - {e}")
     
     print(f"\n🎉 Generated {len(reports_generated)} reports successfully!")
     

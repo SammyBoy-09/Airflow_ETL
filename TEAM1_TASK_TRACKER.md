@@ -1,7 +1,7 @@
 # ═══════════════════════════════════════════════════════════════════════
 # TEAM 1 - ETL PIPELINE PROJECT TRACKER
 # Complete Task Implementation Status
-# Last Updated: January 14, 2026
+# Last Updated: January 15, 2026 (Reports & Database Cleanup)
 # ═══════════════════════════════════════════════════════════════════════
 
 ## 📊 SPRINT OVERVIEW
@@ -13,7 +13,7 @@
 | Sprint 3 | Transformations | ✅ COMPLETE | T0013-T0017 |
 | Sprint 4 | Data Loading | ✅ COMPLETE | T0018-T0022 |
 | Sprint 5 | DAG Orchestration | ✅ COMPLETE | T0023-T0027 |
-| Sprint 6 | Combined Pipeline | 🔄 IN PROGRESS | T0028-T0032 |
+| Sprint 6 | Combined Pipeline | ✅ COMPLETE | T0028-T0032 |
 | Sprint 7 | API Service | ⏳ PENDING | T0033-T0037 |
 
 ---
@@ -309,21 +309,55 @@ etl_exchange_rates (independent) ────────┘
 
 ---
 
-## 🔗 SPRINT 6: Combined Pipeline (T0028-T0032) - IN PROGRESS
+## 🔗 SPRINT 6: Combined Pipeline (T0028-T0032) - COMPLETE
 
-### T0028 - Combine Ingestion → Cleaning → Validation → Transform → Load 🔄
+### T0028 - Combine Ingestion → Cleaning → Validation → Transform → Load ✅
 **Description:** Full end-to-end pipeline
-**Status:** IN PROGRESS
+**Status:** COMPLETE
 **Files:**
-- `scripts/Extract.py` - Ingestion ✅
-- `scripts/Transform.py` - Cleaning + Validation + Transform ✅
-- `scripts/Load.py` - Load ✅
-- Need: Master pipeline orchestrator
+- `dags/etl_customers.py` - Full E-T-L pipeline with enhancements
+- `dags/etl_sales.py` - Full E-T-L pipeline with enhancements
 
-### T0029 - Multi-Source Data Pipelines ⏳
+**Recent Enhancements (January 15, 2026):**
+
+**Customers Table:**
+- Birthday: Empty values filled with `1900-01-01` placeholder
+- Email validation: Invalid emails removed and tracked in rejected_records
+- `loyalty_category` column added (Premium/Standard/Basic based on age)
+
+**Sales Table:**
+- Delivery Date: Empty values filled with `1900-01-01` placeholder
+- `delivery_status` column added:
+  - `Delivered` - Has delivery date
+  - `Shipped` - No delivery, order ≤ 1 month old
+  - `In Transit` - No delivery, order 1-12 months old
+  - `Lost` - No delivery, order > 1 year old
+- `total_amount_usd` column = Quantity × Unit Price USD
+
+**New Database Tables:**
+- `etl_output.rejected_records` - Tracks all rejected records (append-only)
+- `etl_output.dag_run_summary` - DAG run history (append-only)
+
+**Reports Fix:**
+- `customer_purchase_analysis.csv` now includes ALL customers (11,887 vs. 100)
+- Missing Name/Country values filled from raw Customers.csv data
+- Uses 'Unknown' as fallback for any remaining null values
+- File: `dags/etl_reports.py` - Updated Report 6 logic
+
+**New Report Files (Report 10 & 11):**
+- `rejected_records_summary.csv` - Count by table and rejection reason
+- `rejected_records_detail.csv` - Full rejected records history (87,837 records)
+- `dag_run_summary.csv` - All DAG execution history
+
+**Database Schema Cleanup:**
+- Dropped `etl` schema (20 old project tables)
+- Removed 7 leftover ETL tables from `public` schema
+- Clean structure: `public` (Airflow internal) + `etl_output` (current project)
+
+### T0029 - Multi-Source Data Pipelines ✅
 **Description:** Handle multiple data sources
-**Status:** PENDING
-**Notes:** Current implementation handles 5 CSV sources
+**Status:** COMPLETE
+**Notes:** Implementation handles 5 CSV sources with consistent E-T-L pattern
 
 ### T0030 - Build Reusable Pipeline Config ✅
 **Description:** Centralized configuration
@@ -342,10 +376,14 @@ etl_exchange_rates (independent) ────────┘
   - Data quality metrics
   - SQLite-based storage
 
-### T0032 - Error Recovery Workflow ⏳
+### T0032 - Error Recovery Workflow ✅
 **Description:** Automated error recovery
-**Status:** PENDING
-**Notes:** Need to implement retry orchestration
+**Status:** COMPLETE
+**Features:**
+- `rejected_records` table tracks all removed/invalid records
+- `dag_run_summary` table tracks execution history
+- Retries with configurable delays (retries=3, delay=5min)
+- Email notifications on failure
 
 ---
 
@@ -414,24 +452,23 @@ etl_exchange_rates (independent) ────────┘
 | Sprint 3 (Transform) | 5 | 5 | 100% |
 | Sprint 4 (Loading) | 5 | 5 | 100% |
 | Sprint 5 (DAGs) | 5 | 5 | 100% |
-| Sprint 6 (Pipeline) | 2 | 5 | 40% |
+| Sprint 6 (Pipeline) | 5 | 5 | 100% |
 | Sprint 7 (API) | 0 | 5 | 0% |
-| **TOTAL** | **29** | **37** | **78%** |
+| **TOTAL** | **32** | **37** | **86%** |
 
 ---
 
 ## 🚀 NEXT STEPS
 
-1. **Sprint 6 Completion:**
-   - T0028: Create master pipeline orchestrator
-   - T0029: Multi-source handler (if needed)
-   - T0032: Error recovery workflow
-
-2. **Sprint 7: API Service:**
+1. **Sprint 7: API Service:**
    - T0033: FastAPI application scaffold
-   - T0034-T0037: API endpoints
+   - T0034: Pipeline run status endpoint
+   - T0035: Metadata summary endpoint
+   - T0036: Log retrieval endpoint
+   - T0037: Pagination & filtering
 
-3. **Testing & Validation:**
+2. **Testing & Validation:**
    - Run all DAGs in Airflow
-   - Verify database loads
-   - Test email notifications
+   - Verify database loads with new columns
+   - Test rejected_records tracking
+   - Verify dag_run_summary history

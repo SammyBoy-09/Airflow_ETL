@@ -1,7 +1,7 @@
 # ================================================================================
 # TEAM 1 - ETL PIPELINE PROJECT TRACKER
 # ================================================================================
-# Last Updated: January 14, 2026 (Phase 5 & 6 Complete)
+# Last Updated: January 15, 2026 (Reports Enhancement & Database Cleanup)
 # Purpose: Comprehensive tracking of all tasks, decisions, and progress
 # Architecture: Extract.py → Transform.py → Load.py → ReportGenerator.py
 # ================================================================================
@@ -39,8 +39,8 @@
 ### 5 Cleaned Output Tables
 | # | Table | Source File | Output File | Key Cleaning Operations |
 |---|-------|-------------|-------------|------------------------|
-| 1 | **Customers** | Customers.csv | customers_cleaned.csv | Dedupe, birthday→datetime, age→int (mean fill), email validation |
-| 2 | **Sales** | Sales.csv | sales_cleaned.csv | Date standardization, Delivery_Status column, Total_Amount_USD (JOIN Products) |
+| 1 | **Customers** | Customers.csv | customers_cleaned.csv | Dedupe, birthday→1900-01-01 placeholder, age→int (mean fill), email validation (remove invalid), `loyalty_category` column |
+| 2 | **Sales** | Sales.csv | sales_cleaned.csv | Date standardization, Delivery Date→1900-01-01 placeholder, `delivery_status` column, `total_amount_usd` column (JOIN Products) |
 | 3 | **Products** | Products.csv | products_cleaned.csv | Standard cleaning, z-score for numeric columns |
 | 4 | **Stores** | Stores.csv | stores_cleaned.csv | Standard cleaning |
 | 5 | **Exchange_Rates** | Exchange_Rates.csv | exchange_rates_cleaned.csv | Standard cleaning |
@@ -198,6 +198,8 @@
 | T0032 | Error recovery workflow | ✅ | dags/dag_base.py (retries, callbacks), rejected_records table |
 
 **Sprint 6 Files:**
+- `dags/etl_customers.py` - Full E-T-L with loyalty_category, rejected_records tracking
+- `dags/etl_sales.py` - Full E-T-L with delivery_status, total_amount_usd columns
 - `dags/etl_master_orchestrator.py` - Full pipeline orchestration with TaskGroups
 - `data/processed/reports/orchestrator_execution_summary.json` - Execution summary output
 - `data/reports/*.csv` - 9 generated reports
@@ -208,6 +210,44 @@
 - **Reusable Config:** dag_base.py with DEFAULT_ARGS, SCHEDULE_MIDNIGHT_IST, etc.
 - **Execution Summary:** JSON summary with stage timing and DAG status
 - **Error Recovery:** Retries, rejected_records table, failure callbacks
+
+**Sprint 6 Enhancements (January 15, 2026):**
+
+**Customers Table Enhancements:**
+- Birthday: Empty values → `1900-01-01` placeholder date
+- Email: Invalid emails removed (tracked in rejected_records)
+- New column: `loyalty_category` (Premium/Standard/Basic based on age)
+
+**Sales Table Enhancements:**
+- Delivery Date: Empty values → `1900-01-01` placeholder date
+- New column: `delivery_status` (Delivered/Shipped/In Transit/Lost)
+- New column: `total_amount_usd` (Quantity × Unit Price USD from Products)
+
+**New Database Tables:**
+- `etl_output.rejected_records` - Tracks all rejected records (append-only)
+  - Columns: table_name, record_id, reason, original_data, rejected_at, dag_run_id
+- `etl_output.dag_run_summary` - DAG execution history (append-only)
+  - Columns: dag_id, run_id, execution_date, table_name, rows_extracted, rows_loaded, rows_rejected, status
+
+**Reports Fix (January 15, 2026):**
+- `customer_purchase_analysis.csv` now includes ALL customers (11,887 rows)
+- Missing Name/Country filled from raw Customers.csv (for rejected customers)
+- Fallback to 'Unknown' for any remaining null values
+- Fixed `.head(100)` limit that was artificially restricting output
+
+**New Report Files Added (January 15, 2026):**
+- `rejected_records_summary.csv` - Aggregated count by table_name and reason
+- `rejected_records_detail.csv` - Full history of all 87,837 rejected records
+- `dag_run_summary.csv` - Complete DAG execution history with rows extracted/loaded/rejected
+
+**Database Schema Cleanup (January 15, 2026):**
+- **Dropped `etl` schema** - Removed 20 old project tables
+- **Cleaned `public` schema** - Removed 7 leftover ETL tables:
+  - customers_cleaned, customers_summary, products_summary
+  - sellers_summary, rejected_records, etl_rejected_records, etl_load_errors
+- **Final Structure:**
+  - `public` - Airflow internal tables only (53 tables)
+  - `etl_output` - Current project output (7 tables)
 
 ---
 

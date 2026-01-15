@@ -1,55 +1,55 @@
 {
-  "orchestrator_run_id": "manual__2026-01-14T14:23:59.011530+00:00",
-  "execution_date": "2026-01-14 14:23:59.011530+00:00",
-  "total_duration_seconds": 105.67384999999999,
+  "orchestrator_run_id": "manual__2026-01-15T05:13:26.800364+00:00",
+  "execution_date": "2026-01-15 05:13:26.800364+00:00",
+  "total_duration_seconds": 105.457762,
   "stages": [
     {
       "stage": "Stage1_Independent",
-      "duration_seconds": 34.185275,
-      "duration_formatted": "34.19s"
+      "duration_seconds": 34.542469,
+      "duration_formatted": "34.54s"
     },
     {
       "stage": "Stage2_Sales",
-      "duration_seconds": 36.231964,
-      "duration_formatted": "36.23s"
+      "duration_seconds": 34.958352,
+      "duration_formatted": "34.96s"
     },
     {
       "stage": "Stage3_Reports",
-      "duration_seconds": 35.256611,
-      "duration_formatted": "35.26s"
+      "duration_seconds": 35.956941,
+      "duration_formatted": "35.96s"
     }
   ],
   "dag_statuses": [
     {
       "dag_id": "etl_customers",
       "status": "SUCCESS",
-      "last_execution": "2026-01-14T14:24:03.483508+00:00"
+      "last_execution": "2026-01-15T05:13:37.900362+00:00"
     },
     {
       "dag_id": "etl_products",
       "status": "SUCCESS",
-      "last_execution": "2026-01-14T14:24:03.484630+00:00"
+      "last_execution": "2026-01-15T05:13:37.897775+00:00"
     },
     {
       "dag_id": "etl_stores",
       "status": "SUCCESS",
-      "last_execution": "2026-01-14T14:24:03.485266+00:00"
+      "last_execution": "2026-01-15T05:13:37.894858+00:00"
     },
     {
       "dag_id": "etl_exchange_rates",
       "status": "SUCCESS",
-      "last_execution": "2026-01-14T14:24:03.483599+00:00"
+      "last_execution": "2026-01-15T05:13:37.891398+00:00"
     },
     {
       "dag_id": "etl_sales",
       "status": "SUCCESS",
-      "last_execution": "2026-01-14T14:24:38.842948+00:00"
+      "last_execution": "2026-01-15T05:14:13.599210+00:00"
     },
     {
       "dag_id": "etl_reports",
       "status": "SUCCESS",
-      "last_execution": "2026-01-14T14:25:15.891195+00:00"
+      "last_execution": "2026-01-15T05:14:49.756428+00:00"
     }
   ],
-  "generated_at": "2026-01-14T14:25:51.267351"
+  "generated_at": "2026-01-15T05:15:25.950020"
 }

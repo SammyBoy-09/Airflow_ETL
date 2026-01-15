@@ -89,14 +89,53 @@ def transform_sales(**context):
     
     df = pd.read_csv(staging_file)
     initial_rows = len(df)
+    rejected_records = []
     
     # Parse date columns
-    date_columns = ['Order Date', 'Delivery Date']
-    for col in date_columns:
-        if col in df.columns:
-            df[col] = pd.to_datetime(df[col], errors='coerce')
+    if 'Order Date' in df.columns:
+        df['Order Date'] = pd.to_datetime(df['Order Date'], errors='coerce')
+    if 'Delivery Date' in df.columns:
+        df['Delivery Date'] = pd.to_datetime(df['Delivery Date'], errors='coerce')
+    
+    # ========================================
+    # Delivery Status Logic
+    # - Delivered: has delivery date
+    # - Shipped: no delivery, order within 1 month
+    # - In Transit: no delivery, order between 1 month and 1 year
+    # - Lost: no delivery, order older than 1 year
+    # ========================================
+    from datetime import datetime
+    current_date = pd.Timestamp.now()
+    one_month_ago = current_date - pd.DateOffset(months=1)
+    one_year_ago = current_date - pd.DateOffset(years=1)
+    
+    def get_delivery_status(row):
+        if pd.notna(row['Delivery Date']):
+            return 'Delivered'
+        order_date = row['Order Date']
+        if pd.isna(order_date):
+            return 'Unknown'
+        if order_date >= one_month_ago:
+            return 'Shipped'
+        elif order_date >= one_year_ago:
+            return 'In Transit'
+        else:
+            return 'Lost'
+    
+    df['delivery_status'] = df.apply(get_delivery_status, axis=1)
+    
+    # Fill missing Delivery Date with placeholder (1900-01-01) for non-delivered orders
+    df['Delivery Date'] = df['Delivery Date'].fillna(pd.Timestamp('1900-01-01'))
     
     # Remove duplicates based on Order Number
+    duplicates = df[df.duplicated(subset=['Order Number'], keep='first')]
+    for _, row in duplicates.iterrows():
+        rejected_records.append({
+            'table': 'sales',
+            'record_id': str(row.get('Order Number', '')),
+            'reason': 'duplicate',
+            'original_data': row.to_json()
+        })
     df = df.drop_duplicates(subset=['Order Number'], keep='first')
     duplicates_removed = initial_rows - len(df)
     
@@ -106,29 +145,74 @@ def transform_sales(**context):
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
     
-    # Remove invalid records (negative quantities)
+    # Remove invalid records (negative/zero quantities) and track rejections
     if 'Quantity' in df.columns:
-        invalid = len(df[df['Quantity'] <= 0])
+        invalid_qty = df[df['Quantity'] <= 0]
+        for _, row in invalid_qty.iterrows():
+            rejected_records.append({
+                'table': 'sales',
+                'record_id': str(row.get('Order Number', '')),
+                'reason': 'invalid_quantity',
+                'original_data': row.to_json()
+            })
         df = df[df['Quantity'] > 0]
-        print(f"   Removed {invalid} records with invalid quantity")
+        print(f"   Removed {len(invalid_qty)} records with invalid quantity")
+    
+    # ========================================
+    # Calculate total_amount_usd
+    # Join with Products to get Unit Price USD, then multiply by Quantity
+    # ========================================
+    try:
+        # Load products to get unit price
+        products_file = f'{DATA_PROCESSED}/products_cleaned.csv'
+        products_df = pd.read_csv(products_file)
+        
+        # Clean the Unit Price USD column (remove $ and spaces)
+        if 'Unit Price USD' in products_df.columns:
+            products_df['Unit Price USD'] = products_df['Unit Price USD'].replace(
+                r'[\$,\s]', '', regex=True
+            ).astype(float)
+        
+        # Merge to get unit price
+        df = df.merge(
+            products_df[['ProductKey', 'Unit Price USD']],
+            on='ProductKey',
+            how='left'
+        )
+        
+        # Calculate total amount in USD
+        df['total_amount_usd'] = df['Quantity'] * df['Unit Price USD'].fillna(0)
+        df['total_amount_usd'] = df['total_amount_usd'].round(2)
+        
+        # Drop the Unit Price USD column (we only need total)
+        df = df.drop(columns=['Unit Price USD'], errors='ignore')
+        
+        print(f"   Added total_amount_usd column")
+    except Exception as e:
+        print(f"   Warning: Could not calculate total_amount_usd: {e}")
+        df['total_amount_usd'] = 0.0
     
     df.to_csv(output_file, index=False)
     
     print(f"✅ Transformed sales: {initial_rows:,} → {len(df):,} rows")
     print(f"   Duplicates removed: {duplicates_removed}")
+    print(f"   Total rejected: {len(rejected_records)}")
     
     context['ti'].xcom_push(key='output_file', value=output_file)
     context['ti'].xcom_push(key='cleaned_rows', value=len(df))
+    context['ti'].xcom_push(key='rejected_records', value=rejected_records)
     
-    return {'rows': len(df), 'file': output_file}
+    return {'rows': len(df), 'file': output_file, 'rejected': len(rejected_records)}
 
 
 def load_sales(**context):
     """Load sales to PostgreSQL"""
     import pandas as pd
     from sqlalchemy import create_engine, text
+    from datetime import datetime
     
     output_file = context['ti'].xcom_pull(key='output_file', task_ids='transform')
+    rejected_records = context['ti'].xcom_pull(key='rejected_records', task_ids='transform') or []
     
     df = pd.read_csv(output_file)
     
@@ -142,12 +226,74 @@ def load_sales(**context):
         except Exception:
             pass  # Schema already exists
         conn.execute(text("DROP TABLE IF EXISTS etl_output.sales"))
+        
+        # Create rejected_records table if not exists (append-only)
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS etl_output.rejected_records (
+                id SERIAL PRIMARY KEY,
+                table_name VARCHAR(100),
+                record_id VARCHAR(100),
+                reason VARCHAR(100),
+                original_data TEXT,
+                rejected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                dag_run_id VARCHAR(255)
+            )
+        """))
+        
+        # Create dag_run_summary table if not exists (append-only)
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS etl_output.dag_run_summary (
+                id SERIAL PRIMARY KEY,
+                dag_id VARCHAR(100),
+                run_id VARCHAR(255),
+                execution_date TIMESTAMP,
+                table_name VARCHAR(100),
+                rows_extracted INT,
+                rows_loaded INT,
+                rows_rejected INT,
+                status VARCHAR(50),
+                completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
     
     df.to_sql(
         'sales',
         engine,
         schema='etl_output',
         if_exists='replace',
+        index=False
+    )
+    
+    # Save rejected records (append)
+    if rejected_records:
+        rejected_df = pd.DataFrame(rejected_records)
+        rejected_df['dag_run_id'] = context['run_id']
+        rejected_df.rename(columns={'table': 'table_name'}, inplace=True)
+        rejected_df.to_sql(
+            'rejected_records',
+            engine,
+            schema='etl_output',
+            if_exists='append',
+            index=False
+        )
+        print(f"   Saved {len(rejected_records)} rejected records")
+    
+    # Save dag run summary (append)
+    run_summary = pd.DataFrame([{
+        'dag_id': 'etl_sales',
+        'run_id': context['run_id'],
+        'execution_date': str(context['logical_date']),
+        'table_name': 'sales',
+        'rows_extracted': context['ti'].xcom_pull(key='row_count', task_ids='extract'),
+        'rows_loaded': len(df),
+        'rows_rejected': len(rejected_records),
+        'status': 'success'
+    }])
+    run_summary.to_sql(
+        'dag_run_summary',
+        engine,
+        schema='etl_output',
+        if_exists='append',
         index=False
     )
     

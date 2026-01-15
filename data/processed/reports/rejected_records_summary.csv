@@ -1,0 +1,4 @@
+table_name,reason,count
+sales,duplicate,109674
+customers,invalid_email,10720
+customers,duplicate,6104
