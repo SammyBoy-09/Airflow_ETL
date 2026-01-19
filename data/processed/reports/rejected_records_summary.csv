@@ -1,4 +1,4 @@
 table_name,reason,count
-sales,duplicate,109674
-customers,invalid_email,10720
-customers,duplicate,6104
+sales,duplicate,292464
+customers,invalid_email,17420
+customers,duplicate,9919

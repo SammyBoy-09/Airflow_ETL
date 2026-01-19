@@ -31,6 +31,16 @@ This document collects concise code excerpts from the repository that implement 
 | Reusable Pipeline Config | T0030 | dags/dag_base.py |
 | Pipeline Execution Summary | T0031 | dags/etl_reports.py (9 reports), etl_master_orchestrator.py (JSON summary) |
 | Error Recovery Workflow | T0032 | dags/dag_base.py (retries, failure callbacks) |
+| REST API - DAG Management | T0033 | scripts/api/routers/dags.py (list, status, runs, tasks) |
+| REST API - Metadata Queries | T0034 | scripts/api/routers/metadata.py (tables, metrics, summary) |
+| REST API - Logs Retrieval | T0035 | scripts/api/routers/logs.py (DAG logs, task logs) |
+| REST API - Filtering & Pagination | T0036 | scripts/api/utils/pagination.py, utils/filters.py |
+| REST API - Health & Documentation | T0037 | scripts/api/main.py (health check, OpenAPI docs) |
+| Containerization - Docker Compose | T0038 | Docker/docker-compose.yaml (6 services orchestration) |
+| Containerization - Volume Management | T0039 | Docker/docker-compose.yaml (persistent storage) |
+| Containerization - Network Configuration | T0040 | Docker/docker-compose.yaml (etl-network) |
+| Containerization - Service Health Checks | T0041 | Docker/health_check.sh, docker-compose.yaml |
+| Containerization - Environment Configuration | T0042 | Docker/.env (credentials, ports, paths) |
 
 ---
 
@@ -1941,7 +1951,854 @@ wait_for_products = ExternalTaskSensor(
 
 ---
 
-### Cross-References
+## T0033) REST API - DAG Management
+
+**FastAPI Router for DAG operations**
+
+```python
+# T0033: REST API - DAG Management Endpoints
+# File: scripts/api/routers/dags.py
+"""
+DAG Management Router
+Provides endpoints for listing DAGs, checking status, retrieving runs and tasks.
+"""
+from fastapi import APIRouter, HTTPException, Depends, Query
+from typing import List, Optional
+from ..models.dag_models import DAGInfo, DAGStatusResponse, DAGRunInfo, TaskInstanceInfo
+from ..utils.airflow_client import AirflowClient
+from ..utils.pagination import PaginationParams, paginate_response
+from ..utils.filters import FilterParams
+
+router = APIRouter(prefix="/dags", tags=["DAGs"])
+
+@router.get("/", response_model=List[DAGInfo])
+async def list_dags(
+    paused: Optional[bool] = Query(None, description="Filter by paused status"),
+    tag: Optional[str] = Query(None, description="Filter by tag"),
+    client: AirflowClient = Depends()
+):
+    """List all DAGs with optional filtering"""
+    dags = await client.get_dags(paused=paused, tag=tag)
+    return dags
+
+@router.get("/{dag_id}/status", response_model=DAGStatusResponse)
+async def get_dag_status(
+    dag_id: str,
+    client: AirflowClient = Depends()
+):
+    """Get comprehensive status for a specific DAG"""
+    status = await client.get_dag_status(dag_id)
+    if not status:
+        raise HTTPException(status_code=404, detail=f"DAG {dag_id} not found")
+    return status
+
+@router.get("/{dag_id}/runs")
+async def get_dag_runs(
+    dag_id: str,
+    state: Optional[str] = Query(None, description="Filter by state: success, failed, running"),
+    pagination: PaginationParams = Depends(),
+    client: AirflowClient = Depends()
+):
+    """Get DAG runs with filtering and pagination"""
+    runs = await client.get_dag_runs(
+        dag_id=dag_id,
+        state=state,
+        limit=pagination.page_size,
+        offset=pagination.offset
+    )
+    return paginate_response(runs, pagination)
+
+@router.get("/{dag_id}/runs/{run_id}/tasks", response_model=List[TaskInstanceInfo])
+async def get_run_tasks(
+    dag_id: str,
+    run_id: str,
+    state: Optional[str] = Query(None),
+    client: AirflowClient = Depends()
+):
+    """Get all task instances for a specific DAG run"""
+    tasks = await client.get_run_tasks(dag_id, run_id, state=state)
+    return tasks
+```
+
+---
+
+## T0034) REST API - Metadata Queries
+
+**Metadata Router for database statistics**
+
+```python
+# T0034: REST API - Metadata Queries
+# File: scripts/api/routers/metadata.py
+"""
+Metadata Router
+Provides endpoints for querying Airflow database metadata and statistics.
+"""
+from fastapi import APIRouter, Depends
+from ..models.metadata_models import MetadataSummary, TableInfo, MetricsResponse
+from ..utils.airflow_client import AirflowClient
+
+router = APIRouter(prefix="/metadata", tags=["Metadata"])
+
+@router.get("/summary", response_model=MetadataSummary)
+async def get_metadata_summary(client: AirflowClient = Depends()):
+    """Get overall metadata statistics"""
+    summary = await client.get_metadata_summary()
+    return summary
+
+@router.get("/tables", response_model=List[TableInfo])
+async def get_tables(client: AirflowClient = Depends()):
+    """List all Airflow database tables with row counts"""
+    tables = await client.get_table_info()
+    return tables
+
+@router.get("/metrics", response_model=MetricsResponse)
+async def get_metrics(client: AirflowClient = Depends()):
+    """Get performance metrics and statistics"""
+    metrics = {
+        "total_dag_runs": await client.count_dag_runs(),
+        "total_task_instances": await client.count_task_instances(),
+        "avg_duration_seconds": await client.get_avg_duration(),
+        "success_rate": await client.get_success_rate()
+    }
+    return MetricsResponse(**metrics)
+```
+
+---
+
+## T0035) REST API - Logs Retrieval
+
+**Logs Router for DAG and task logs**
+
+```python
+# T0035: REST API - Logs Retrieval
+# File: scripts/api/routers/logs.py
+"""
+Logs Router
+Provides endpoints for retrieving DAG and task execution logs.
+"""
+from fastapi import APIRouter, HTTPException, Depends, Query
+from pathlib import Path
+from typing import Optional
+from ..models.log_models import LogResponse
+from ..utils.airflow_client import AirflowClient
+
+router = APIRouter(prefix="/logs", tags=["Logs"])
+
+@router.get("/{dag_id}", response_model=LogResponse)
+async def get_dag_logs(
+    dag_id: str,
+    run_id: Optional[str] = Query(None),
+    task_id: Optional[str] = Query(None),
+    try_number: int = Query(1),
+    lines: int = Query(100, description="Number of lines to retrieve"),
+    client: AirflowClient = Depends()
+):
+    """
+    Retrieve logs for a DAG run or specific task
+    
+    - If run_id and task_id provided: Returns task logs
+    - If only run_id provided: Returns all logs for that run
+    - If neither provided: Returns latest DAG logs
+    """
+    logs_dir = Path("logs") / f"dag_id={dag_id}"
+    
+    if not logs_dir.exists():
+        raise HTTPException(status_code=404, detail=f"No logs found for DAG {dag_id}")
+    
+    if run_id and task_id:
+        log_path = logs_dir / f"run_id={run_id}" / f"task_id={task_id}" / f"attempt={try_number}.log"
+    elif run_id:
+        log_path = logs_dir / f"run_id={run_id}"
+    else:
+        # Get latest run logs
+        log_path = sorted(logs_dir.glob("run_id=*"))[-1]
+    
+    if not log_path.exists():
+        raise HTTPException(status_code=404, detail="Log file not found")
+    
+    # Read last N lines
+    with open(log_path, 'r', encoding='utf-8') as f:
+        content = f.readlines()[-lines:]
+    
+    return LogResponse(
+        dag_id=dag_id,
+        run_id=run_id,
+        task_id=task_id,
+        try_number=try_number,
+        lines=len(content),
+        content="".join(content)
+    )
+```
+
+---
+
+## T0036) REST API - Filtering & Pagination
+
+**Pagination utility for large result sets**
+
+```python
+# T0036: REST API - Filtering & Pagination
+# File: scripts/api/utils/pagination.py
+"""
+Pagination Utility
+Handles pagination for API responses with large datasets.
+"""
+from typing import List, TypeVar, Generic, Optional
+from pydantic import BaseModel, Field
+
+T = TypeVar('T')
+
+class PaginationParams(BaseModel):
+    """Query parameters for pagination"""
+    page: int = Field(1, ge=1, description="Page number (1-indexed)")
+    page_size: int = Field(20, ge=1, le=100, description="Items per page")
+    
+    @property
+    def offset(self) -> int:
+        return (self.page - 1) * self.page_size
+
+class PaginatedResponse(BaseModel, Generic[T]):
+    """Generic paginated response wrapper"""
+    page: int
+    page_size: int
+    total: int
+    total_pages: int
+    data: List[T]
+    has_next: bool
+    has_prev: bool
+
+def paginate_response(
+    items: List[T], 
+    params: PaginationParams,
+    total: Optional[int] = None
+) -> PaginatedResponse[T]:
+    """Apply pagination to a list of items"""
+    total = total or len(items)
+    total_pages = (total + params.page_size - 1) // params.page_size
+    
+    start = params.offset
+    end = start + params.page_size
+    page_items = items[start:end]
+    
+    return PaginatedResponse(
+        page=params.page,
+        page_size=params.page_size,
+        total=total,
+        total_pages=total_pages,
+        data=page_items,
+        has_next=params.page < total_pages,
+        has_prev=params.page > 1
+    )
+```
+
+**Filter utility for query parameters**
+
+```python
+# T0036: REST API - Filtering & Pagination
+# File: scripts/api/utils/filters.py
+"""
+Filter Utility
+Handles filtering of API results by various criteria.
+"""
+from typing import Optional, List, Any
+from datetime import datetime
+from pydantic import BaseModel
+
+class FilterParams(BaseModel):
+    """Common filter parameters"""
+    state: Optional[str] = None
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+    tags: Optional[List[str]] = None
+
+def apply_filters(items: List[Any], filters: FilterParams) -> List[Any]:
+    """Apply filters to a list of items"""
+    result = items
+    
+    if filters.state:
+        result = [item for item in result if item.state == filters.state]
+    
+    if filters.start_date:
+        result = [item for item in result 
+                 if item.execution_date >= filters.start_date]
+    
+    if filters.end_date:
+        result = [item for item in result 
+                 if item.execution_date <= filters.end_date]
+    
+    if filters.tags:
+        result = [item for item in result 
+                 if any(tag in item.tags for tag in filters.tags)]
+    
+    return result
+```
+
+---
+
+## T0037) REST API - Health & Documentation
+
+**Main FastAPI application with health check**
+
+```python
+# T0037: REST API - Health & Documentation
+# File: scripts/api/main.py
+"""
+Airflow REST API Service
+FastAPI application providing REST endpoints for Airflow metadata queries.
+"""
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+import time
+from .routers import dags, metadata, logs
+from .config import settings
+
+app = FastAPI(
+    title="Airflow ETL API",
+    description="REST API for querying Airflow DAG metadata, logs, and statistics",
+    version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/api/v1/openapi.json"
+)
+
+# CORS middleware for web dashboard access
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Request timing middleware
+@app.middleware("http")
+async def add_process_time_header(request: Request, call_next):
+    start_time = time.time()
+    response = await call_next(request)
+    process_time = time.time() - start_time
+    response.headers["X-Process-Time"] = str(process_time)
+    return response
+
+# Include routers
+app.include_router(dags.router, prefix="/api/v1")
+app.include_router(metadata.router, prefix="/api/v1")
+app.include_router(logs.router, prefix="/api/v1")
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint"""
+    return {
+        "status": "healthy",
+        "service": "airflow-api",
+        "version": "1.0.0",
+        "timestamp": time.time()
+    }
+
+@app.get("/")
+async def root():
+    """Root endpoint with API information"""
+    return {
+        "message": "Airflow ETL REST API",
+        "docs": "/docs",
+        "health": "/health",
+        "api_version": "v1"
+    }
+```
+
+**API key authentication**
+
+```python
+# T0037: REST API - Security
+# File: scripts/api/utils/auth.py
+"""
+Authentication Utility
+Provides API key validation for secured endpoints.
+"""
+from fastapi import Security, HTTPException, status
+from fastapi.security import APIKeyHeader
+from ..config import settings
+
+api_key_header = APIKeyHeader(name="X-API-Key", auto_error=True)
+
+async def verify_api_key(api_key: str = Security(api_key_header)):
+    """Verify API key from request header"""
+    if api_key != settings.API_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid API key"
+        )
+    return api_key
+```
+
+---
+
+## T0038) Containerization - Docker Compose
+
+**Multi-service Docker Compose orchestration**
+
+```python
+# T0038: Containerization - Docker Compose Orchestration
+# File: Docker/docker-compose.yaml
+"""
+Docker Compose Configuration
+Orchestrates 6 services: Postgres, Redis, Airflow Webserver, Scheduler, REST API, pgAdmin
+"""
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: airflow-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "${POSTGRES_PORT}:5432"
+    volumes:
+      - postgres-db-volume:/var/lib/postgresql/data
+    networks:
+      - etl-network
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 10s
+      retries: 5
+      start_period: 5s
+
+  redis:
+    image: redis:7.2-bookworm
+    container_name: airflow-redis
+    expose:
+      - 6379
+    networks:
+      - etl-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 30s
+      retries: 50
+      start_period: 30s
+
+  airflow-webserver:
+    build:
+      context: ..
+      dockerfile: Docker/Dockerfile
+    container_name: airflow-webserver
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      AIRFLOW__CELERY__BROKER_URL: redis://redis:6379/0
+      AIRFLOW__CORE__FERNET_KEY: ''
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+      AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
+    volumes:
+      - ../dags:/opt/airflow/dags
+      - ../logs:/opt/airflow/logs
+      - ../data:/opt/airflow/data
+      - ../scripts:/opt/airflow/scripts
+      - ../config:/opt/airflow/config
+    ports:
+      - "8080:8080"
+    command: webserver
+    networks:
+      - etl-network
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  airflow-scheduler:
+    build:
+      context: ..
+      dockerfile: Docker/Dockerfile
+    container_name: airflow-scheduler
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      AIRFLOW__CELERY__BROKER_URL: redis://redis:6379/0
+      AIRFLOW__CORE__FERNET_KEY: ''
+    volumes:
+      - ../dags:/opt/airflow/dags
+      - ../logs:/opt/airflow/logs
+      - ../data:/opt/airflow/data
+      - ../scripts:/opt/airflow/scripts
+      - ../config:/opt/airflow/config
+    command: scheduler
+    networks:
+      - etl-network
+    healthcheck:
+      test: ["CMD", "airflow", "jobs", "check", "--job-type", "SchedulerJob"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  api:
+    build:
+      context: ..
+      dockerfile: Docker/Dockerfile.api
+    container_name: airflow-api
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      API_KEY: ${API_KEY}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../logs:/app/logs:ro
+    networks:
+      - etl-network
+    command: uvicorn scripts.api.main:app --host 0.0.0.0 --port 8000
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: airflow-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
+      PGADMIN_CONFIG_SERVER_MODE: 'True'
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+    networks:
+      - etl-network
+    depends_on:
+      - postgres
+
+networks:
+  etl-network:
+    driver: bridge
+
+volumes:
+  postgres-db-volume:
+  pgadmin-data:
+```
+
+---
+
+## T0039) Containerization - Volume Management
+
+**Persistent storage configuration**
+
+```yaml
+# T0039: Containerization - Volume Management
+# Defined in Docker/docker-compose.yaml
+
+# Named volumes for persistent data
+volumes:
+  postgres-db-volume:
+    # PostgreSQL database files persist across container restarts
+    # Stores all Airflow metadata tables
+    
+  pgadmin-data:
+    # pgAdmin configuration and saved connections
+    # Preserves user settings and server configurations
+
+# Bind mounts for development
+# Mount local directories into containers for live code updates
+
+airflow-webserver:
+  volumes:
+    - ../dags:/opt/airflow/dags              # DAG definitions (read/write)
+    - ../logs:/opt/airflow/logs              # Task execution logs (read/write)
+    - ../data:/opt/airflow/data              # CSV data files (read/write)
+    - ../scripts:/opt/airflow/scripts        # Python utility modules (read-only)
+    - ../config:/opt/airflow/config          # YAML configurations (read-only)
+
+airflow-scheduler:
+  volumes:
+    - ../dags:/opt/airflow/dags
+    - ../logs:/opt/airflow/logs
+    - ../data:/opt/airflow/data
+    - ../scripts:/opt/airflow/scripts
+    - ../config:/opt/airflow/config
+
+api:
+  volumes:
+    - ../logs:/app/logs:ro                   # Read-only access to logs
+
+# Volume benefits:
+# 1. Data persistence: Database survives container restarts
+# 2. Live development: Code changes reflect immediately without rebuilds
+# 3. Log access: API can read logs generated by Airflow tasks
+# 4. Configuration sharing: All services use same config files
+```
+
+---
+
+## T0040) Containerization - Network Configuration
+
+**Docker bridge network setup**
+
+```yaml
+# T0040: Containerization - Network Configuration
+# Defined in Docker/docker-compose.yaml
+
+# Custom bridge network for service communication
+networks:
+  etl-network:
+    driver: bridge
+
+# All services connected to etl-network:
+services:
+  postgres:
+    networks:
+      - etl-network
+    # Internal hostname: postgres
+    # Accessible by other services at: postgres:5432
+    
+  redis:
+    networks:
+      - etl-network
+    # Internal hostname: redis
+    # Accessible at: redis:6379
+    
+  airflow-webserver:
+    networks:
+      - etl-network
+    ports:
+      - "8080:8080"  # External access: localhost:8080
+    # Can connect to: postgres:5432, redis:6379
+    
+  airflow-scheduler:
+    networks:
+      - etl-network
+    # No external ports, internal communication only
+    
+  api:
+    networks:
+      - etl-network
+    ports:
+      - "8000:8000"  # External access: localhost:8000
+    # Connects to postgres:5432 for metadata queries
+    
+  pgadmin:
+    networks:
+      - etl-network
+    ports:
+      - "5050:80"    # External access: localhost:5050
+    # Connects to postgres:5432 for database admin
+
+# Network features:
+# - Service discovery: Containers resolve each other by service name
+# - Isolation: Services in etl-network isolated from other Docker networks
+# - Port mapping: External ports (8080, 8000, 5050, 5434) map to internal ports
+# - Security: Only mapped ports accessible from host, others internal-only
+```
+
+---
+
+## T0041) Containerization - Service Health Checks
+
+**Health check script and configuration**
+
+```bash
+# T0041: Containerization - Service Health Checks
+# File: Docker/health_check.sh
+#!/bin/bash
+# Health check script for Airflow services
+
+set -e
+
+# Check if Airflow webserver is responding
+check_webserver() {
+    echo "Checking Airflow webserver..."
+    curl -f http://localhost:8080/health || exit 1
+}
+
+# Check if Airflow scheduler is running
+check_scheduler() {
+    echo "Checking Airflow scheduler..."
+    airflow jobs check --job-type SchedulerJob --hostname "$HOSTNAME" || exit 1
+}
+
+# Check if PostgreSQL is ready
+check_postgres() {
+    echo "Checking PostgreSQL..."
+    pg_isready -U airflow -d airflow || exit 1
+}
+
+# Check if Redis is responding
+check_redis() {
+    echo "Checking Redis..."
+    redis-cli ping | grep -q PONG || exit 1
+}
+
+# Run appropriate check based on service
+case "$1" in
+    webserver)
+        check_webserver
+        ;;
+    scheduler)
+        check_scheduler
+        ;;
+    postgres)
+        check_postgres
+        ;;
+    redis)
+        check_redis
+        ;;
+    *)
+        echo "Usage: $0 {webserver|scheduler|postgres|redis}"
+        exit 1
+        ;;
+esac
+
+echo "✅ Health check passed for $1"
+```
+
+**Health check configurations in docker-compose.yaml**
+
+```yaml
+# T0041: Health check configurations
+
+postgres:
+  healthcheck:
+    test: ["CMD", "pg_isready", "-U", "airflow"]
+    interval: 10s        # Check every 10 seconds
+    retries: 5          # Fail after 5 unsuccessful attempts
+    start_period: 5s    # Grace period before first check
+
+redis:
+  healthcheck:
+    test: ["CMD", "redis-cli", "ping"]
+    interval: 10s
+    timeout: 30s
+    retries: 50
+    start_period: 30s
+
+airflow-webserver:
+  healthcheck:
+    test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+    interval: 30s
+    timeout: 10s
+    retries: 5
+    start_period: 30s
+  depends_on:
+    postgres:
+      condition: service_healthy  # Wait for postgres to be healthy
+    redis:
+      condition: service_healthy  # Wait for redis to be healthy
+
+airflow-scheduler:
+  healthcheck:
+    test: ["CMD", "airflow", "jobs", "check", "--job-type", "SchedulerJob"]
+    interval: 30s
+    timeout: 10s
+    retries: 5
+    start_period: 30s
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
+# Benefits:
+# - Ordered startup: Services wait for dependencies to be healthy
+# - Automatic recovery: Unhealthy containers automatically restart
+# - Status monitoring: docker-compose ps shows health status
+# - Orchestration: Prevents cascading failures from premature starts
+```
+
+---
+
+## T0042) Containerization - Environment Configuration
+
+**Environment variables file**
+
+```bash
+# T0042: Containerization - Environment Configuration
+# File: Docker/.env
+# Contains all configuration variables for Docker services
+
+# PostgreSQL Configuration
+POSTGRES_USER=airflow
+POSTGRES_PASSWORD=airflow
+POSTGRES_DB=airflow
+POSTGRES_PORT=5434
+
+# Airflow Configuration
+AIRFLOW_UID=50000
+AIRFLOW__CORE__EXECUTOR=CeleryExecutor
+AIRFLOW__CORE__FERNET_KEY=
+AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=true
+AIRFLOW__CORE__LOAD_EXAMPLES=false
+
+# REST API Configuration
+API_KEY=dev-key-12345
+DATABASE_URL=postgresql://airflow:airflow@postgres:5432/airflow
+
+# pgAdmin Configuration
+PGADMIN_DEFAULT_EMAIL=admin@admin.com
+PGADMIN_DEFAULT_PASSWORD=admin
+PGADMIN_CONFIG_SERVER_MODE=True
+
+# Application Paths
+AIRFLOW_HOME=/opt/airflow
+PYTHONPATH=/opt/airflow
+
+# Security note: In production, use strong passwords and secrets management
+```
+
+**Usage in docker-compose.yaml**
+
+```yaml
+# Environment variables referenced with ${VARIABLE_NAME}
+
+postgres:
+  environment:
+    POSTGRES_USER: ${POSTGRES_USER}              # airflow
+    POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}      # airflow
+    POSTGRES_DB: ${POSTGRES_DB}                  # airflow
+  ports:
+    - "${POSTGRES_PORT}:5432"                    # 5434:5432
+
+api:
+  environment:
+    DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+    API_KEY: ${API_KEY}
+
+pgadmin:
+  environment:
+    PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+    PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
+```
+
+---
+
+### Sprint 7 & 8 Cross-References
+- **REST API Main:** scripts/api/main.py (FastAPI app, health check, OpenAPI docs)
+- **API Routers:** scripts/api/routers/dags.py, metadata.py, logs.py
+- **API Models:** scripts/api/models/dag_models.py, metadata_models.py, log_models.py
+- **API Utils:** scripts/api/utils/airflow_client.py, pagination.py, filters.py, auth.py
+- **Web Dashboard:** scripts/api/web_dashboard.py (Flask interface on port 5000)
+- **Docker Compose:** Docker/docker-compose.yaml (6 services: postgres, redis, webserver, scheduler, api, pgadmin)
+- **Docker Files:** Docker/Dockerfile (Airflow image), Docker/Dockerfile.api (FastAPI image)
+- **Configuration:** Docker/.env (environment variables for all services)
+- **Documentation:** API_ROUTES_GUIDE.md (850+ lines), Docker/API_SERVICE_GUIDE.md
+
+---
+
+### Summary
 - **Master Orchestrator:** dags/etl_master_orchestrator.py (TaskGroups, TriggerDagRunOperator)
 - **Dimension DAGs:** dags/etl_customers.py, etl_products.py, etl_stores.py, etl_exchange_rates.py
 - **Fact DAG:** dags/etl_sales.py (ExternalTaskSensor for etl_products)
@@ -1950,7 +2807,7 @@ wait_for_products = ExternalTaskSensor(
 - **Utility Modules:** scripts/utils/*.py (validation, aggregation, bulk load, upsert, etc.)
 
 ### Summary
-All 32 tasks (T0007–T0032) are fully implemented across 6 sprints:
+All 42 tasks (T0007–T0042) are fully implemented across 8 sprints:
 
 **Sprint 2 - Data Quality (T0008–T0012):** Cleaning utilities, type handling, deduplication, missing value strategies, config-driven rules.
 
@@ -1962,6 +2819,10 @@ All 32 tasks (T0007–T0032) are fully implemented across 6 sprints:
 
 **Sprint 6 - Combined Pipeline (T0028–T0032):** 5 source-specific E-T-L DAGs, reusable dag_base.py config, execution summary generation (JSON + 9 CSV reports), error recovery workflow.
 
+**Sprint 7 - REST API (T0033–T0037):** FastAPI service with 13 endpoints across 4 categories (DAGs, metadata, logs, health), Pydantic models, pagination/filtering utilities, OpenAPI documentation, Flask web dashboard for user-friendly interface.
+
+**Sprint 8 - Containerization (T0038–T0042):** Docker Compose orchestration with 6 services (Postgres, Redis, Airflow webserver, Airflow scheduler, REST API, pgAdmin), persistent volumes, bridge networking, health checks, environment configuration, pgAdmin for database visualization.
+
 **Database Tables Created:**
 | Table | Rows | Source |
 |-------|------|--------|
@@ -1970,5 +2831,26 @@ All 32 tasks (T0007–T0032) are fully implemented across 6 sprints:
 | etl_output.stores | 67 | Stores.csv |
 | etl_output.exchange_rates | 3,655 | Exchange_Rates.csv |
 | etl_output.sales | 26,326 | Sales.csv |
+
+**API Endpoints (13 total):**
+- **DAGs:** GET /api/v1/dags, GET /api/v1/dags/{dag_id}/status, GET /api/v1/dags/{dag_id}/runs, GET /api/v1/dags/{dag_id}/runs/{run_id}/tasks
+- **Metadata:** GET /api/v1/metadata/summary, GET /api/v1/metadata/tables, GET /api/v1/metadata/metrics
+- **Logs:** GET /api/v1/logs/{dag_id}
+- **Health:** GET /health, GET /docs (OpenAPI), GET /redoc
+
+**Docker Services (6 total):**
+- **postgres:15** - Airflow metadata database (port 5434)
+- **redis:7.2** - Celery broker (internal)
+- **airflow-webserver** - UI interface (port 8080)
+- **airflow-scheduler** - DAG scheduler (internal)
+- **airflow-api** - REST API service (port 8000)
+- **pgadmin4** - Database admin tool (port 5050)
+
+**Access Points:**
+- Airflow UI: http://localhost:8080 (airflow/airflow)
+- REST API: http://localhost:8000 (docs at /docs)
+- Web Dashboard: http://localhost:5000 (Flask UI)
+- pgAdmin: http://localhost:5050 (admin@admin.com/admin)
+- PostgreSQL: localhost:5434 (airflow/airflow)
 
 Reusable utility modules in `scripts/utils/` provide modular components for validation, aggregation, bulk loading, upserts, and rejected record handling.

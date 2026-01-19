@@ -1,7 +1,7 @@
 # ================================================================================
-# TEAM 1 - ETL PIPELINE PROJECT TRACKER
+# AIRFLOW ETL PIPELINE PROJECT TRACKER
 # ================================================================================
-# Last Updated: January 15, 2026 (Reports Enhancement & Database Cleanup)
+# Last Updated: January 19, 2026 (Added Sprint 7 Enhancements - Web Dashboard & pgAdmin)
 # Purpose: Comprehensive tracking of all tasks, decisions, and progress
 # Architecture: Extract.py → Transform.py → Load.py → ReportGenerator.py
 # ================================================================================
@@ -10,17 +10,44 @@
 
 | Item | Details |
 |------|---------|
-| **Project Name** | Amazon ETL Pipeline Framework |
-| **Team** | TEAM 1 |
-| **Total Tasks** | 37 (T0001 - T0037) |
-| **Total Sprints** | 7 |
+| **Project Name** | Airflow ETL Pipeline Framework |
+| **Teams** | TEAM 1 (Core ETL), TEAM 2 (Data Quality & Advanced) |
+| **Total Tasks** | 69 (Team 1: 42, Team 2: 27) |
+| **Total Sprints** | 13 (Team 1: 8, Team 2: 5) |
 | **Technology Stack** | Python 3.11, Airflow 2.8.3, PostgreSQL 15, Docker |
 | **Conda Environment** | KB_1978 |
 | **Project Root** | D:\sam\Projects\Infosys\Airflow |
 
+## 🔐 ACCESS CREDENTIALS
+
+### Airflow Web UI (http://localhost:8080)
+- **Username:** `airflow`
+- **Password:** `airflow`
+- **Role:** Admin
+
+### pgAdmin (http://localhost:5050)
+- **Email:** `admin@airflow.com`
+- **Password:** `admin`
+
+### PostgreSQL Database
+- **Host (External):** `localhost:5434`
+- **Host (Docker Internal):** `postgres:5432`
+- **Database:** `airflow`
+- **Username:** `airflow`
+- **Password:** `airflow`
+
+### REST API (http://localhost:8000)
+- **Default API Keys:** `dev-key-12345`, `test-key-67890`
+- **Header:** `X-API-Key`
+- **Docs:** http://localhost:8000/docs
+
+### Web Dashboard (http://localhost:5000)
+- **No authentication required**
+- **API Key:** Auto-configured to use `dev-key-12345`
+
 ---
 
-## 📊 SPRINT SUMMARY
+## 📊 TEAM 1 SPRINT SUMMARY
 
 | Sprint | Tasks | Description | Status |
 |--------|-------|-------------|--------|
@@ -30,11 +57,31 @@
 | **Sprint 4** | T0018-T0022 | Loading Strategies | ✅ COMPLETE |
 | **Sprint 5** | T0023-T0027 | Orchestration & Scheduling | ✅ COMPLETE |
 | **Sprint 6** | T0028-T0032 | Combined Pipeline & Recovery | ✅ COMPLETE |
-| **Sprint 7** | T0033-T0037 | API Service Development | 🔲 NOT STARTED |
+| **Sprint 7** | T0033-T0037 | API Service Development | ✅ COMPLETE |
+| **Sprint 8** | T0038-T0042 | Docker Containerization | ✅ COMPLETE |
 
 ---
 
-## 📁 OUTPUT DELIVERABLES
+## 📊 TEAM 2 SPRINT SUMMARY
+
+| Sprint | Tasks | Description | Status |
+|--------|-------|-------------|--------|
+| **Sprint 1** | T0001-T0007 | Multi-Format Ingestion | 🔲 NOT STARTED |
+| **Sprint 2** | T0008-T0012 | Data Quality & Validation | 🔲 NOT STARTED |
+| **Sprint 3** | T0013-T0017 | Schema Validation & Drift | 🔲 NOT STARTED |
+| **Sprint 4** | T0018-T0022 | Data Lake Architecture | 🔲 NOT STARTED |
+| **Sprint 5** | T0023-T0027 | Advanced Scheduling | 🔲 NOT STARTED |
+
+**Team 2 Focus Areas:**
+- Multi-format data ingestion (CSV, JSON, SQL, APIs)
+- Advanced data quality validation and profiling
+- Schema validation and drift detection (Pydantic)
+- Medallion architecture (Bronze/Silver/Gold layers)
+- Advanced scheduling with SLA monitoring
+
+---
+
+## 📁 TEAM 1 OUTPUT DELIVERABLES
 
 ### 5 Cleaned Output Tables
 | # | Table | Source File | Output File | Key Cleaning Operations |
@@ -252,16 +299,140 @@
 ---
 
 ### ═══════════════════════════════════════════════════════════════
-### SPRINT 7: API Service Development (T0033-T0037) 🔲 NOT STARTED
+### SPRINT 7: API Service Development (T0033-T0037) ✅ COMPLETE
 ### ═══════════════════════════════════════════════════════════════
 
-| Task ID | Description | Status | File(s) To Create |
-|---------|-------------|--------|-------------------|
-| T0033 | Build Flask/FastAPI service | 🔲 | api/app.py |
-| T0034 | Expose pipeline run status | 🔲 | api/routes/status.py |
-| T0035 | Expose metadata summary | 🔲 | api/routes/metadata.py |
-| T0036 | Fetch logs via API | 🔲 | api/routes/logs.py |
-| T0037 | Pagination & filtering | 🔲 | api/utils/pagination.py |
+| Task ID | Description | Status | File(s) Created |
+|---------|-------------|--------|------------------|
+| T0033 | Build Flask/FastAPI service | ✅ | scripts/api/main.py, config.py, auth.py |
+| T0034 | Expose pipeline run status | ✅ | scripts/api/routes/dags.py, models/dag_models.py |
+| T0035 | Expose metadata summary | ✅ | scripts/api/routes/metadata.py |
+| T0036 | Fetch logs via API | ✅ | scripts/api/routes/logs.py |
+| T0037 | Pagination & filtering | ✅ | scripts/api/utils/pagination.py, filters.py |
+
+**Sprint 7 Additional Enhancements:**
+- ✅ Flask Web Dashboard (`scripts/api/web_dashboard.py`, `templates/dashboard.html`)
+- ✅ Fixed Python 3.8 compatibility (typing.Tuple/List imports in 4 files)
+- ✅ Fixed API bug: Airflow conf field pickle deserialization (pickle.loads)
+- ✅ pgAdmin integration in Docker Compose (http://localhost:5050)
+- ✅ Comprehensive API routes documentation (API_ROUTES_GUIDE.md)
+- ✅ Interactive testing interface with dropdown navigation
+
+**Sprint 7 Files:**
+- `scripts/api/main.py` - FastAPI application entry point
+- `scripts/api/config.py` - API configuration settings
+- `scripts/api/auth.py` - API key authentication
+- `scripts/api/web_dashboard.py` - Flask web dashboard for interactive testing
+- `scripts/api/templates/dashboard.html` - Interactive HTML interface
+- `scripts/api/models/dag_models.py` - DAG data models (Pydantic)
+- `scripts/api/models/response_models.py` - API response schemas
+- `scripts/api/routes/health.py` - Health check endpoint
+- `scripts/api/routes/dags.py` - DAG status and runs endpoints
+- `scripts/api/routes/metadata.py` - Metadata summary endpoints
+- `scripts/api/routes/logs.py` - Log retrieval endpoints
+- `scripts/api/utils/pagination.py` - Pagination utilities
+- `scripts/api/utils/filters.py` - Query filtering utilities
+- `scripts/api/utils/airflow_client.py` - Airflow database client
+- `scripts/api/README.md` - API documentation
+- `API_ROUTES_GUIDE.md` - Complete API routes reference (850+ lines)
+
+**Sprint 7 Key Features:**
+- **RESTful API**: Complete FastAPI service with auto-generated Swagger docs
+- **13 Endpoints**: Health, DAGs list/status/runs, metadata, logs (3 categories)
+- **Web Dashboard**: User-friendly Flask interface on port 5000 with dropdowns
+- **Authentication**: API key-based authentication via X-API-Key header
+- **Pagination**: Configurable page size (default 50, max 500)
+- **Filtering**: State filtering, date range filtering
+- **CORS**: Configurable cross-origin support
+- **Error Handling**: Global exception handlers with structured responses
+- **Database Integration**: SQLAlchemy-based Airflow metadata queries
+- **Log Access**: File system-based log retrieval with size limits
+- **pgAdmin**: Database visualization tool integrated in Docker (port 5050)
+
+**Sprint 7 API Endpoints:**
+```
+GET  /health                                 - Health check
+GET  /api/v1/dags                           - List all DAGs
+GET  /api/v1/dags/{dag_id}/status           - Get DAG status
+GET  /api/v1/dags/{dag_id}/runs             - Get runs (paginated)
+GET  /api/v1/dags/{dag_id}/runs/{run_id}    - Get run details
+GET  /api/v1/dags/{dag_id}/runs/{run_id}/tasks - Get task instances
+GET  /api/v1/metadata/summary               - Metadata summary
+GET  /api/v1/metadata/tables                - Table statistics
+GET  /api/v1/metadata/metrics               - Pipeline metrics
+GET  /api/v1/logs/dags/{dag_id}             - List logs
+GET  /api/v1/logs/dags/{dag_id}/runs/{run_id} - Run logs
+GET  /api/v1/logs/dags/{dag_id}/runs/{run_id}/tasks/{task_id} - Task logs
+```
+
+**Sprint 7 Usage:**
+```bash
+# Start API server (Docker)
+cd Docker && docker-compose up -d
+
+# Start Web Dashboard (Local)
+python scripts/api/web_dashboard.py
+
+# Access interfaces
+open http://localhost:8000/docs      # Swagger API docs
+open http://localhost:5000           # Web Dashboard
+open http://localhost:5050           # pgAdmin (admin@airflow.com/admin)
+
+# Example API call
+curl -H "X-API-Key: dev-key-12345" http://localhost:8000/api/v1/dags
+```
+
+---
+
+### ═══════════════════════════════════════════════════════════════
+### SPRINT 8: Docker Containerization (T0038-T0042) ✅ COMPLETE
+### ═══════════════════════════════════════════════════════════════
+
+| Task ID | Description | Status | File(s) Created |
+|---------|-------------|--------|------------------|
+| T0038 | Dockerfile for ETL scripts | ✅ | Uses apache/airflow:2.8.3 image |
+| T0039 | Dockerfile for Airflow environment | ✅ | Uses apache/airflow:2.8.3 image |
+| T0040 | Docker Compose setup | ✅ | Docker/docker-compose.yaml |
+| T0041 | Environment variable management | ✅ | .env, Docker/.env |
+| T0042 | Multi-container networking | ✅ | etl-network (bridge) |
+
+**Sprint 8 Files:**
+- `Docker/docker-compose.yaml` - Multi-service orchestration (6 services)
+- `.env` - Environment variables (SMTP, PostgreSQL credentials)
+- `Docker/DEPLOYMENT_COMPLETE.md` - Deployment documentation
+- `Docker/DOCKER_SETUP_GUIDE.md` - Setup instructions
+- `Docker/start_airflow.ps1` - Windows startup script
+- `Docker/start_airflow.sh` - Linux/Mac startup script
+- `Docker/health_check.sh` - Service health validation
+
+**Sprint 8 Docker Services:**
+- **PostgreSQL 15**: Port 5434:5432, persistent volumes
+- **Redis 7**: Port 6379, cache & message broker
+- **Airflow Webserver**: Port 8080, LocalExecutor
+- **Airflow Scheduler**: Background DAG execution
+- **FastAPI Service**: Port 8000, REST API endpoints
+- **pgAdmin 4**: Port 5050, database visualization (admin@airflow.com/admin)
+- **Init Services**: Database initialization, folder creation
+
+**Sprint 8 Key Features:**
+- Health checks on all critical services
+- Automatic volume mounting (dags, scripts, data, config, logs)
+- Network isolation (etl-network - bridge mode)
+- Automatic admin user creation (admin/admin)
+- SMTP email configuration
+- Timezone support (Asia/Kolkata)
+- Python package auto-installation (pandas, sqlalchemy, pyyaml, FastAPI)
+- Database visualization with pgAdmin (connect using hostname: postgres)
+
+**Sprint 8 Production-Ready:**
+- ✅ All 6 containers running and healthy
+- ✅ Web UI accessible at http://localhost:8080
+- ✅ REST API accessible at http://localhost:8000
+- ✅ pgAdmin accessible at http://localhost:5050
+- ✅ Database accessible at localhost:5434 (external) or postgres:5432 (internal)
+- ✅ Persistent data storage with named volumes
+- ✅ Automatic restart policies (unless-stopped)
+- ✅ Complete documentation and health checks
 
 ---
 
@@ -581,12 +752,49 @@ Example:
 
 ## 🎯 NEXT STEPS
 
-### Immediate (Sprint 7: T0033-T0037) - API Service Development
+### Team 1 - Sprint 7: API Service Development (T0033-T0037)
 1. [ ] T0033: Build Flask/FastAPI service
 2. [ ] T0034: Expose pipeline run status endpoint
 3. [ ] T0035: Expose metadata summary endpoint
 4. [ ] T0036: Fetch logs via API endpoint
 5. [ ] T0037: Implement pagination & filtering
+
+### Team 2 - Sprint 1: Multi-Format Ingestion (T0001-T0007) 🎯 CURRENT
+1. [ ] T0001: Environment Setup & Pipeline Design
+2. [ ] T0002: Install Airflow, design data models, set up extraction scripts
+3. [ ] T0003: Understanding data sources (CSV, JSON, SQL, APIs)
+4. [ ] T0004: Build Python scripts for multi-format ingestion
+5. [ ] T0005: Implement file watchers or polling logic
+6. [ ] T0006: Build connection utility for databases
+7. [ ] T0007: Handle exceptions for missing/bad data
+
+### Team 2 - Sprint 2: Data Quality & Validation (T0008-T0012)
+1. [ ] T0008: Implement column-level validation (regex, min/max)
+2. [ ] T0009: Null checks, uniqueness checks
+3. [ ] T0010: Data profiling summary (row count, column stats)
+4. [ ] T0011: Create validation report generator
+5. [ ] T0012: Build DQ summary as JSON
+
+### Team 2 - Sprint 3: Schema Validation & Drift (T0013-T0017)
+1. [ ] T0013: Build schema validator using Pydantic
+2. [ ] T0014: Detect schema drifts
+3. [ ] T0015: Auto-correction for minor drifts
+4. [ ] T0016: Version-controlling schemas
+5. [ ] T0017: Capture discrepancies in logs
+
+### Team 2 - Sprint 4: Data Lake Architecture (T0018-T0022)
+1. [ ] T0018: Create folder structure for bronze/silver/gold layers
+2. [ ] T0019: Save data as CSV, parquet
+3. [ ] T0020: Partitioning strategy
+4. [ ] T0021: Data archival process
+5. [ ] T0022: Maintain metadata log
+
+### Team 2 - Sprint 5: Advanced Scheduling (T0023-T0027)
+1. [ ] T0023: Cron scheduling
+2. [ ] T0024: Timezone configuration
+3. [ ] T0025: Delayed & interval scheduling
+4. [ ] T0026: SLA Miss Alerts
+5. [ ] T0027: Daily/Hourly/Weekly pipeline strategy
 
 ---
 

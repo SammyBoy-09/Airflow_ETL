@@ -23,3 +23,14 @@ email-validator==2.1.0
 
 # Additional utilities
 openpyxl==3.10.10
+
+# ========================================
+# Team 1 - T0033: FastAPI Service Dependencies (Sprint 7)
+# ========================================
+# REST API Framework
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+python-multipart==0.0.6
+
+# HTTP client (for API testing)
+httpx==0.26.0

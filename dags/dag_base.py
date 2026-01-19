@@ -39,8 +39,8 @@ DEFAULT_ARGS = {
     'owner': 'team1',
     'depends_on_past': False,
     'email': [ALERT_EMAIL],
-    'email_on_failure': False,  # Disabled for testing
-    'email_on_retry': False,    # Disabled for testing
+    'email_on_failure': False,  # Disabled - enable after SMTP setup
+    'email_on_retry': False,    # Disabled to reduce email noise
     'retries': 3,
     'retry_delay': timedelta(minutes=1),  # Reduced for testing
     'execution_timeout': timedelta(hours=2),

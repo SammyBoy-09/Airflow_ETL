@@ -1,55 +1,55 @@
 {
-  "orchestrator_run_id": "manual__2026-01-15T05:13:26.800364+00:00",
-  "execution_date": "2026-01-15 05:13:26.800364+00:00",
-  "total_duration_seconds": 105.457762,
+  "orchestrator_run_id": "manual__2026-01-19T14:17:22.619871+00:00",
+  "execution_date": "2026-01-19 14:17:22.619871+00:00",
+  "total_duration_seconds": 108.818823,
   "stages": [
     {
       "stage": "Stage1_Independent",
-      "duration_seconds": 34.542469,
-      "duration_formatted": "34.54s"
+      "duration_seconds": 34.877564,
+      "duration_formatted": "34.88s"
     },
     {
       "stage": "Stage2_Sales",
-      "duration_seconds": 34.958352,
-      "duration_formatted": "34.96s"
+      "duration_seconds": 37.937573,
+      "duration_formatted": "37.94s"
     },
     {
       "stage": "Stage3_Reports",
-      "duration_seconds": 35.956941,
-      "duration_formatted": "35.96s"
+      "duration_seconds": 36.003686,
+      "duration_formatted": "36.00s"
     }
   ],
   "dag_statuses": [
     {
       "dag_id": "etl_customers",
       "status": "SUCCESS",
-      "last_execution": "2026-01-15T05:13:37.900362+00:00"
+      "last_execution": "2026-01-19T14:17:27.521411+00:00"
     },
     {
       "dag_id": "etl_products",
       "status": "SUCCESS",
-      "last_execution": "2026-01-15T05:13:37.897775+00:00"
+      "last_execution": "2026-01-19T14:17:27.528794+00:00"
     },
     {
       "dag_id": "etl_stores",
       "status": "SUCCESS",
-      "last_execution": "2026-01-15T05:13:37.894858+00:00"
+      "last_execution": "2026-01-19T14:17:27.521355+00:00"
     },
     {
       "dag_id": "etl_exchange_rates",
       "status": "SUCCESS",
-      "last_execution": "2026-01-15T05:13:37.891398+00:00"
+      "last_execution": "2026-01-19T14:17:27.525183+00:00"
     },
     {
       "dag_id": "etl_sales",
       "status": "SUCCESS",
-      "last_execution": "2026-01-15T05:14:13.599210+00:00"
+      "last_execution": "2026-01-19T14:18:03.046364+00:00"
     },
     {
       "dag_id": "etl_reports",
       "status": "SUCCESS",
-      "last_execution": "2026-01-15T05:14:49.756428+00:00"
+      "last_execution": "2026-01-19T14:18:41.785703+00:00"
     }
   ],
-  "generated_at": "2026-01-15T05:15:25.950020"
+  "generated_at": "2026-01-19T14:19:18.154112"
 }
