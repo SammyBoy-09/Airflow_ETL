@@ -29,7 +29,8 @@ sys.path.insert(0, '/opt/airflow/scripts')
 from dag_base import (
     DEFAULT_ARGS, SCHEDULE_MIDNIGHT_IST, START_DATE,
     send_success_email, send_failure_email,
-    DATA_RAW, DATA_STAGING, DATA_PROCESSED, get_connection_string
+    DATA_RAW, DATA_STAGING, DATA_PROCESSED, get_connection_string,
+    DATA_BRONZE, DATA_SILVER, copy_to_medallion
 )
 
 
@@ -49,6 +50,8 @@ def extract_stores(**context):
     row_count = len(df)
     
     df.to_csv(staging_file, index=False)
+
+    copy_to_medallion(staging_file, DATA_BRONZE, 'stores_raw.csv')
     
     print(f"✅ Extracted {row_count:,} stores to staging")
     
@@ -85,6 +88,8 @@ def transform_stores(**context):
         df['Square Meters'] = pd.to_numeric(df['Square Meters'], errors='coerce').fillna(0).astype(int)
     
     df.to_csv(output_file, index=False)
+
+    copy_to_medallion(output_file, DATA_SILVER, 'stores_cleaned.csv')
     
     print(f"✅ Transformed stores: {initial_rows:,} → {len(df):,} rows")
     print(f"   Duplicates removed: {duplicates_removed}")
@@ -98,36 +103,27 @@ def transform_stores(**context):
 def load_stores(**context):
     """Load stores to PostgreSQL"""
     import pandas as pd
-    from sqlalchemy import create_engine, text
+    from Load import DatabaseLoader
     
     output_file = context['ti'].xcom_pull(key='output_file', task_ids='transform')
     
     df = pd.read_csv(output_file)
     
-    conn_str = get_connection_string()
-    engine = create_engine(conn_str)
-    
-    # Create schema if not exists (handle race condition)
-    with engine.begin() as conn:
-        try:
-            conn.execute(text("CREATE SCHEMA IF NOT EXISTS etl_output"))
-        except Exception:
-            pass  # Schema already exists
-        conn.execute(text("DROP TABLE IF EXISTS etl_output.stores"))
-    
-    df.to_sql(
-        'stores',
-        engine,
-        schema='etl_output',
-        if_exists='replace',
-        index=False
+    loader = DatabaseLoader()
+    stats = loader.load_table(
+        'stores_cleaned',
+        df,
+        mode='replace',
+        source_location=output_file,
+        context=context
     )
+    loader.disconnect()
     
-    print(f"✅ Loaded {len(df):,} stores to etl_output.stores")
+    print(f"✅ Loaded {stats.get('loaded_rows', len(df)):,} stores to etl_output.stores")
     
-    context['ti'].xcom_push(key='loaded_rows', value=len(df))
+    context['ti'].xcom_push(key='loaded_rows', value=stats.get('loaded_rows', len(df)))
     
-    return {'rows': len(df), 'table': 'etl_output.stores'}
+    return {'rows': stats.get('loaded_rows', len(df)), 'table': 'etl_output.stores'}
 
 
 # ========================================

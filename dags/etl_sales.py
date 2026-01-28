@@ -47,7 +47,9 @@ def get_latest_execution_date(dt, external_dag_id):
 from dag_base import (
     DEFAULT_ARGS, SCHEDULE_MIDNIGHT_IST, START_DATE,
     send_success_email, send_failure_email,
-    DATA_RAW, DATA_STAGING, DATA_PROCESSED, get_connection_string
+    DATA_RAW, DATA_STAGING, DATA_PROCESSED, get_connection_string,
+    DATA_BRONZE, DATA_SILVER, copy_to_medallion,
+    build_external_task_sensor
 )
 
 
@@ -71,6 +73,8 @@ def extract_sales(**context):
     row_count = len(df)
     
     df.to_csv(staging_file, index=False)
+
+    copy_to_medallion(staging_file, DATA_BRONZE, 'sales_raw.csv')
     
     print(f"✅ Extracted {row_count:,} sales records to staging")
     
@@ -193,6 +197,8 @@ def transform_sales(**context):
         df['total_amount_usd'] = 0.0
     
     df.to_csv(output_file, index=False)
+
+    copy_to_medallion(output_file, DATA_SILVER, 'sales_cleaned.csv')
     
     print(f"✅ Transformed sales: {initial_rows:,} → {len(df):,} rows")
     print(f"   Duplicates removed: {duplicates_removed}")
@@ -208,7 +214,8 @@ def transform_sales(**context):
 def load_sales(**context):
     """Load sales to PostgreSQL"""
     import pandas as pd
-    from sqlalchemy import create_engine, text
+    from sqlalchemy import text
+    from Load import DatabaseLoader
     from datetime import datetime
     
     output_file = context['ti'].xcom_pull(key='output_file', task_ids='transform')
@@ -216,8 +223,8 @@ def load_sales(**context):
     
     df = pd.read_csv(output_file)
     
-    conn_str = get_connection_string()
-    engine = create_engine(conn_str)
+    loader = DatabaseLoader()
+    engine = loader.connect()
     
     # Create schema if not exists (handle race condition)
     with engine.begin() as conn:
@@ -256,12 +263,12 @@ def load_sales(**context):
             )
         """))
     
-    df.to_sql(
-        'sales',
-        engine,
-        schema='etl_output',
-        if_exists='replace',
-        index=False
+    stats = loader.load_table(
+        'sales_cleaned',
+        df,
+        mode='replace',
+        source_location=output_file,
+        context=context
     )
     
     # Save rejected records (append)
@@ -297,11 +304,12 @@ def load_sales(**context):
         index=False
     )
     
-    print(f"✅ Loaded {len(df):,} sales to etl_output.sales")
+    print(f"✅ Loaded {stats.get('loaded_rows', len(df)):,} sales to etl_output.sales")
     
-    context['ti'].xcom_push(key='loaded_rows', value=len(df))
+    context['ti'].xcom_push(key='loaded_rows', value=stats.get('loaded_rows', len(df)))
     
-    return {'rows': len(df), 'table': 'etl_output.sales'}
+    loader.disconnect()
+    return {'rows': stats.get('loaded_rows', len(df)), 'table': 'etl_output.sales'}
 
 
 # ========================================
@@ -326,17 +334,14 @@ with DAG(
     
     # Wait for Products DAG to complete (Sales references Products)
     # For testing with manual triggers, we look for the latest successful run
-    wait_for_products = ExternalTaskSensor(
+    wait_for_products = build_external_task_sensor(
         task_id='wait_for_products',
         external_dag_id='etl_products',
         external_task_id='end',
-        allowed_states=['success'],
-        failed_states=['failed', 'skipped'],
-        execution_date_fn=lambda dt: get_latest_execution_date(dt, 'etl_products'),
-        timeout=7200,  # 2 hours
-        poke_interval=30,  # Check every 30 seconds
-        mode='reschedule',  # Free worker while waiting
+        timeout=7200,
+        poke_interval=30,
     )
+    wait_for_products.execution_date_fn = lambda dt: get_latest_execution_date(dt, 'etl_products')
     
     extract = PythonOperator(
         task_id='extract',

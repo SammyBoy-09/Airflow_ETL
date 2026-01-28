@@ -90,30 +90,54 @@ class AirflowClient:
     
     def list_dags(self) -> List[DAGInfo]:
         """
-        Get list of all DAGs.
+        Get list of all DAGs with latest run information.
         
         Returns:
             List of DAGInfo objects
         """
         query = text("""
             SELECT 
-                dag_id,
-                description,
-                schedule_interval,
-                is_paused,
-                is_active,
-                owners,
-                last_parsed_time as last_run_date,
-                next_dagrun as next_run_date
-            FROM dag
-            WHERE is_active = true
-            ORDER BY dag_id
+                d.dag_id,
+                d.description,
+                d.schedule_interval,
+                d.is_paused,
+                d.is_active,
+                d.owners,
+                d.last_parsed_time as last_run_date,
+                d.next_dagrun as next_run_date,
+                dr.run_id,
+                dr.state,
+                dr.execution_date,
+                dr.start_date,
+                dr.end_date
+            FROM dag d
+            LEFT JOIN LATERAL (
+                SELECT run_id, state, execution_date, start_date, end_date
+                FROM dag_run
+                WHERE dag_id = d.dag_id
+                ORDER BY execution_date DESC
+                LIMIT 1
+            ) dr ON true
+            WHERE d.is_active = true
+            ORDER BY d.dag_id
         """)
         
         with self.engine.connect() as conn:
             result = conn.execute(query)
             dags = []
             for row in result:
+                # Create LatestRunInfo if run data exists
+                latest_run = None
+                if row.run_id:
+                    from ..models.dag_models import LatestRunInfo
+                    latest_run = LatestRunInfo(
+                        run_id=row.run_id,
+                        state=row.state,
+                        execution_date=row.execution_date,
+                        start_date=row.start_date,
+                        end_date=row.end_date
+                    )
+                
                 dags.append(DAGInfo(
                     dag_id=row.dag_id,
                     description=row.description,
@@ -123,13 +147,14 @@ class AirflowClient:
                     tags=[],  # Would need separate query for tags
                     owners=[row.owners] if row.owners else [],
                     last_run_date=row.last_run_date,
-                    next_run_date=row.next_run_date
+                    next_run_date=row.next_run_date,
+                    latest_run=latest_run
                 ))
             return dags
     
     def get_dag_info(self, dag_id: str) -> Optional[DAGInfo]:
         """
-        Get information for a specific DAG.
+        Get information for a specific DAG with latest run.
         
         Args:
             dag_id: DAG identifier
@@ -139,21 +164,45 @@ class AirflowClient:
         """
         query = text("""
             SELECT 
-                dag_id,
-                description,
-                schedule_interval,
-                is_paused,
-                is_active,
-                owners,
-                last_parsed_time as last_run_date,
-                next_dagrun as next_run_date
-            FROM dag
-            WHERE dag_id = :dag_id
+                d.dag_id,
+                d.description,
+                d.schedule_interval,
+                d.is_paused,
+                d.is_active,
+                d.owners,
+                d.last_parsed_time as last_run_date,
+                d.next_dagrun as next_run_date,
+                dr.run_id,
+                dr.state,
+                dr.execution_date,
+                dr.start_date,
+                dr.end_date
+            FROM dag d
+            LEFT JOIN LATERAL (
+                SELECT run_id, state, execution_date, start_date, end_date
+                FROM dag_run
+                WHERE dag_id = d.dag_id
+                ORDER BY execution_date DESC
+                LIMIT 1
+            ) dr ON true
+            WHERE d.dag_id = :dag_id
         """)
         
         with self.engine.connect() as conn:
             result = conn.execute(query, {"dag_id": dag_id}).fetchone()
             if result:
+                # Create LatestRunInfo if run data exists
+                latest_run = None
+                if result.run_id:
+                    from ..models.dag_models import LatestRunInfo
+                    latest_run = LatestRunInfo(
+                        run_id=result.run_id,
+                        state=result.state,
+                        execution_date=result.execution_date,
+                        start_date=result.start_date,
+                        end_date=result.end_date
+                    )
+                
                 return DAGInfo(
                     dag_id=result.dag_id,
                     description=result.description,
@@ -163,7 +212,8 @@ class AirflowClient:
                     tags=[],
                     owners=[result.owners] if result.owners else [],
                     last_run_date=result.last_run_date,
-                    next_run_date=result.next_run_date
+                    next_run_date=result.next_run_date,
+                    latest_run=latest_run
                 )
             return None
     
@@ -342,6 +392,51 @@ class AirflowClient:
                     "failed": result.failed or 0
                 }
             return {"total": 0, "success": 0, "failed": 0}
+    
+    def get_etl_metrics(self) -> List[Dict[str, Any]]:
+        """
+        Get ETL metrics from dag_run_summary table.
+        
+        Returns:
+            List of dictionaries with table-level metrics
+        """
+        query = text("""
+            SELECT 
+                table_name,
+                SUM(rows_extracted) as rows_extracted,
+                SUM(rows_loaded) as rows_loaded,
+                SUM(rows_rejected) as rows_rejected,
+                MAX(execution_date) as last_run_date
+            FROM etl_output.dag_run_summary
+            WHERE table_name IS NOT NULL
+            GROUP BY table_name
+            ORDER BY table_name
+        """)
+        
+        try:
+            print(f"[DEBUG] Connecting to database: {self.engine.url}")
+            with self.engine.connect() as conn:
+                print("[DEBUG] Executing ETL metrics query...")
+                result = conn.execute(query)
+                metrics = []
+                row_count = 0
+                for row in result:
+                    row_count += 1
+                    metrics.append({
+                        "table_name": row.table_name,
+                        "rows_extracted": int(row.rows_extracted or 0),
+                        "rows_loaded": int(row.rows_loaded or 0),
+                        "rows_rejected": int(row.rows_rejected or 0),
+                        "last_run_date": row.last_run_date.isoformat() if row.last_run_date else None
+                    })
+                print(f"[DEBUG] Query returned {row_count} rows")
+                print(f"[DEBUG] Metrics: {metrics}")
+                return metrics
+        except Exception as e:
+            print(f"[ERROR] Error fetching ETL metrics: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
     
     # ========================================
     # Team 1 - T0035: Table Statistics Methods

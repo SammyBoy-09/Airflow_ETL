@@ -22,7 +22,10 @@ Provides:
 from datetime import datetime, timedelta
 from airflow.models import Variable
 from airflow.utils.email import send_email
+from airflow.sensors.external_task import ExternalTaskSensor
+from typing import Optional, List
 import os
+import shutil
 
 # ========================================
 # DAG DEFAULT ARGUMENTS
@@ -44,7 +47,29 @@ DEFAULT_ARGS = {
     'retries': 3,
     'retry_delay': timedelta(minutes=1),  # Reduced for testing
     'execution_timeout': timedelta(hours=2),
+    'sla': timedelta(minutes=int(os.getenv('SLA_MINUTES', '60'))),
+    'sla_miss_callback': None,
 }
+
+
+def sla_miss_callback(dag, task_list, blocking_task_list, slas, blocking_tis, *args, **kwargs):
+    """Send email on SLA miss."""
+    subject = f"⏰ SLA Miss: {dag.dag_id}"
+    task_names = ", ".join(task_list or [])
+    body = f"""
+    <h2>SLA Miss Detected</h2>
+    <table border="1" cellpadding="5">
+        <tr><td><b>DAG</b></td><td>{dag.dag_id}</td></tr>
+        <tr><td><b>Tasks</b></td><td>{task_names}</td></tr>
+        <tr><td><b>Execution Date</b></td><td>{slas[0].execution_date if slas else 'N/A'}</td></tr>
+    </table>
+    <p>Please review task durations and upstream dependencies.</p>
+    """
+    send_email(to=ALERT_EMAIL, subject=subject, html_content=body)
+
+
+# Attach SLA callback after definition
+DEFAULT_ARGS['sla_miss_callback'] = sla_miss_callback
 
 # Schedule: Midnight IST = 18:30 UTC
 # IST is UTC+5:30, so midnight IST = 18:30 previous day UTC
@@ -56,12 +81,17 @@ START_DATE = datetime(2025, 12, 25)
 # ========================================
 # Team 1 - T0026: Backfill & Catchup Features
 # ========================================
+# Advanced backfill controls
+BACKFILL_ENABLED = os.getenv('BACKFILL_ENABLED', 'true').lower() == 'true'
+BACKFILL_MAX_ACTIVE_RUNS = int(os.getenv('BACKFILL_MAX_ACTIVE_RUNS', '3'))
+BACKFILL_WINDOW_DAYS = int(os.getenv('BACKFILL_WINDOW_DAYS', '14'))
+
 # Common DAG configuration
 DAG_CONFIG = {
     'start_date': START_DATE,
     'schedule_interval': SCHEDULE_MIDNIGHT_IST,
-    'catchup': True,
-    'max_active_runs': 3,
+    'catchup': BACKFILL_ENABLED,
+    'max_active_runs': BACKFILL_MAX_ACTIVE_RUNS,
     'tags': ['team1', 'etl', 'amazon'],
 }
 
@@ -131,6 +161,43 @@ DATA_RAW = '/opt/airflow/data/raw/dataset'
 DATA_STAGING = '/opt/airflow/data/staging'
 DATA_PROCESSED = '/opt/airflow/data/processed'
 DATA_REPORTS = '/opt/airflow/data/reports'
+
+# Phase 5 - Medallion Architecture
+DATA_BRONZE = '/opt/airflow/data/bronze'
+DATA_SILVER = '/opt/airflow/data/silver'
+DATA_GOLD = '/opt/airflow/data/gold'
+DATA_ARCHIVE = '/opt/airflow/data/archive'
+
+
+def copy_to_medallion(source_path: str, stage_dir: str, target_name: str) -> str:
+    """Copy a file into the medallion layer folder."""
+    os.makedirs(stage_dir, exist_ok=True)
+    target_path = os.path.join(stage_dir, target_name)
+    shutil.copy2(source_path, target_path)
+    return target_path
+
+
+def build_external_task_sensor(
+    task_id: str,
+    external_dag_id: str,
+    external_task_id: Optional[str] = None,
+    timeout: int = 900,
+    poke_interval: int = 5,
+    allowed_states: Optional[List[str]] = None,
+    failed_states: Optional[List[str]] = None,
+    mode: str = "reschedule",
+):
+    """Standardize cross-DAG dependency sensors. Optimized for fast execution."""
+    return ExternalTaskSensor(
+        task_id=task_id,
+        external_dag_id=external_dag_id,
+        external_task_id=external_task_id,
+        allowed_states=allowed_states or ["success"],
+        failed_states=failed_states or ["failed", "skipped"],
+        timeout=timeout,
+        poke_interval=poke_interval,
+        mode=mode,
+    )
 
 # ========================================
 # Team 1 - T0029: Multi-Source Data Pipelines

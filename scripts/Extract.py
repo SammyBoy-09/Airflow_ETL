@@ -9,9 +9,13 @@ Extract.py - Data Extraction Module
 TASKS IMPLEMENTED:
 - T0002: Install Airflow, design data models, set up extraction scripts
 - T0007: Implement demo script to read/write CSVs
+- T2S1-02: Multi-format ingestion (CSV, JSON, SQL, API) - PHASE 1
 
 Responsibilities:
 - Extract data from CSV source files
+- Extract data from JSON/JSONL files (NEW - PHASE 1)
+- Extract data from SQL databases (NEW - PHASE 1)
+- Extract data from REST APIs (NEW - PHASE 1)
 - Validate source file existence
 - Load data into staging (memory/temp files)
 - Track extraction metrics
@@ -28,9 +32,19 @@ Uses: scripts/utils/validation_utils.py for data validation
 
 import pandas as pd
 import logging
-from typing import Dict, Any, Optional, Tuple
+from typing import Dict, Any, Optional, Tuple, Union, Literal
 from pathlib import Path
 from datetime import datetime
+
+# Import new ingestion modules (PHASE 1)
+try:
+    from scripts.ingest_json import JSONIngester
+    from scripts.ingest_sql import SQLIngester
+    from scripts.ingest_api import APIIngester
+    MULTI_FORMAT_SUPPORT = True
+except ImportError:
+    logger.warning("⚠️ Multi-format ingestion modules not available")
+    MULTI_FORMAT_SUPPORT = False
 
 # Configure logging
 logging.basicConfig(
@@ -93,10 +107,15 @@ class DataExtractor:
         self.extracted_data: Dict[str, pd.DataFrame] = {}
         self.extraction_stats: Dict[str, Dict[str, Any]] = {}
         
+        # Initialize multi-format ingesters (PHASE 1)
+        self.json_ingester = JSONIngester() if MULTI_FORMAT_SUPPORT else None
+        self.sql_ingester = None  # Initialize on-demand
+        self.api_ingester = None  # Initialize on-demand
+        
         # Ensure staging directory exists
         self.staging_dir.mkdir(parents=True, exist_ok=True)
         
-        logger.info(f"▶ DataExtractor initialized")
+        logger.info(f"▶ DataExtractor initialized (Multi-format: {MULTI_FORMAT_SUPPORT})")
         logger.info(f"   Source: {self.data_dir}")
         logger.info(f"   Staging: {self.staging_dir}")
     
@@ -180,6 +199,217 @@ class DataExtractor:
             stats['end_time'] = datetime.now()
             logger.error(f"   ❌ Extraction failed: {e}")
             return None, stats
+    
+    # ═══════════════════════════════════════════════════════════════════════
+    # PHASE 1: MULTI-FORMAT INGESTION METHODS (JSON, SQL, API)
+    # ═══════════════════════════════════════════════════════════════════════
+    
+    def extract_json(self, file_path: Union[str, Path], table_name: str,
+                    normalize: bool = True, is_jsonl: bool = False) -> Tuple[Optional[pd.DataFrame], Dict[str, Any]]:
+        """
+        Extract data from JSON/JSONL file (PHASE 1)
+        
+        Args:
+            file_path: Path to JSON file
+            table_name: Logical table name for tracking
+            normalize: Flatten nested JSON structures
+            is_jsonl: True for JSON Lines format
+            
+        Returns:
+            Tuple of (DataFrame, stats_dict)
+        """
+        if not MULTI_FORMAT_SUPPORT or not self.json_ingester:
+            raise RuntimeError("JSON ingestion not available. Install required modules.")
+        
+        file_path = Path(file_path)
+        stats = {
+            'table': table_name,
+            'file': str(file_path),
+            'format': 'JSONL' if is_jsonl else 'JSON',
+            'start_time': datetime.now(),
+            'rows': 0,
+            'columns': 0,
+            'success': False,
+            'error': None
+        }
+        
+        logger.info(f"▶ Extracting {table_name} from {stats['format']}...")
+        
+        try:
+            if is_jsonl:
+                df = self.json_ingester.read_jsonl(file_path)
+            else:
+                df = self.json_ingester.read_json(file_path, normalize=normalize)
+            
+            stats['rows'] = len(df)
+            stats['columns'] = len(df.columns)
+            stats['success'] = True
+            stats['end_time'] = datetime.now()
+            stats['duration_seconds'] = (stats['end_time'] - stats['start_time']).total_seconds()
+            
+            logger.info(f"   ✅ Extracted {stats['rows']:,} rows, {stats['columns']} columns")
+            
+            self.extracted_data[table_name] = df
+            self.extraction_stats[table_name] = stats
+            
+            return df, stats
+            
+        except Exception as e:
+            stats['success'] = False
+            stats['error'] = str(e)
+            stats['end_time'] = datetime.now()
+            logger.error(f"   ❌ JSON extraction failed: {e}")
+            return None, stats
+    
+    def extract_from_sql(self, connection_string: str, table_name: str,
+                        schema: Optional[str] = None, query: Optional[str] = None,
+                        where_clause: Optional[str] = None) -> Tuple[Optional[pd.DataFrame], Dict[str, Any]]:
+        """
+        Extract data from SQL database (PHASE 1)
+        
+        Args:
+            connection_string: SQLAlchemy connection string
+            table_name: Table name to extract
+            schema: Schema name (optional)
+            query: Custom SQL query (overrides table_name if provided)
+            where_clause: WHERE clause filter
+            
+        Returns:
+            Tuple of (DataFrame, stats_dict)
+        """
+        if not MULTI_FORMAT_SUPPORT:
+            raise RuntimeError("SQL ingestion not available. Install required modules.")
+        
+        stats = {
+            'table': table_name,
+            'source': 'SQL Database',
+            'format': 'SQL',
+            'start_time': datetime.now(),
+            'rows': 0,
+            'columns': 0,
+            'success': False,
+            'error': None
+        }
+        
+        logger.info(f"▶ Extracting {table_name} from SQL database...")
+        
+        try:
+            # Initialize SQL ingester
+            sql_ingester = SQLIngester(connection_string=connection_string)
+            
+            # Execute query or extract table
+            if query:
+                df = sql_ingester.execute_query(query)
+            else:
+                df = sql_ingester.extract_table(table_name, schema=schema, where_clause=where_clause)
+            
+            stats['rows'] = len(df)
+            stats['columns'] = len(df.columns)
+            stats['success'] = True
+            stats['end_time'] = datetime.now()
+            stats['duration_seconds'] = (stats['end_time'] - stats['start_time']).total_seconds()
+            
+            logger.info(f"   ✅ Extracted {stats['rows']:,} rows, {stats['columns']} columns")
+            
+            self.extracted_data[table_name] = df
+            self.extraction_stats[table_name] = stats
+            
+            sql_ingester.close()
+            
+            return df, stats
+            
+        except Exception as e:
+            stats['success'] = False
+            stats['error'] = str(e)
+            stats['end_time'] = datetime.now()
+            logger.error(f"   ❌ SQL extraction failed: {e}")
+            return None, stats
+    
+    def extract_from_api(self, base_url: str, endpoint: str, table_name: str,
+                        auth_type: str = 'none', auth_params: Optional[Dict] = None,
+                        paginated: bool = False, pagination_type: str = 'offset',
+                        max_pages: Optional[int] = None,
+                        pagination_config: Optional[Dict] = None,
+                        rate_limit_config: Optional[Dict] = None) -> Tuple[Optional[pd.DataFrame], Dict[str, Any]]:
+        """
+        Extract data from REST API (PHASE 1)
+        
+        Args:
+            base_url: API base URL
+            endpoint: API endpoint
+            table_name: Logical table name
+            auth_type: Authentication type ('none', 'api_key', 'bearer', etc.)
+            auth_params: Authentication parameters
+            paginated: Whether to handle pagination
+            pagination_type: Pagination type ('offset', 'page', 'cursor')
+            max_pages: Maximum pages to fetch
+            pagination_config: Pagination configuration dictionary
+            rate_limit_config: Rate limiting configuration dictionary
+            
+        Returns:
+            Tuple of (DataFrame, stats_dict)
+        """
+        if not MULTI_FORMAT_SUPPORT:
+            raise RuntimeError("API ingestion not available. Install required modules.")
+        
+        stats = {
+            'table': table_name,
+            'source': f"{base_url}{endpoint}",
+            'format': 'API',
+            'start_time': datetime.now(),
+            'rows': 0,
+            'columns': 0,
+            'success': False,
+            'error': None
+        }
+        
+        logger.info(f"▶ Extracting {table_name} from API...")
+        
+        try:
+            # Initialize API ingester
+            auth_params = auth_params or {}
+            if rate_limit_config:
+                auth_params = {**auth_params, 'rate_limit': rate_limit_config}
+
+            if pagination_config and pagination_config.get('enabled'):
+                paginated = True
+                pagination_type = pagination_config.get('type', pagination_type)
+                max_pages = pagination_config.get('max_pages', max_pages)
+
+            api_ingester = APIIngester(base_url=base_url, auth_type=auth_type, **auth_params)
+            
+            # Ingest to DataFrame
+            df = api_ingester.ingest_to_dataframe(
+                endpoint=endpoint,
+                paginated=paginated,
+                pagination_type=pagination_type,
+                max_pages=max_pages,
+                pagination_config=pagination_config
+            )
+            
+            stats['rows'] = len(df)
+            stats['columns'] = len(df.columns)
+            stats['success'] = True
+            stats['end_time'] = datetime.now()
+            stats['duration_seconds'] = (stats['end_time'] - stats['start_time']).total_seconds()
+            
+            logger.info(f"   ✅ Extracted {stats['rows']:,} rows, {stats['columns']} columns")
+            
+            self.extracted_data[table_name] = df
+            self.extraction_stats[table_name] = stats
+            
+            return df, stats
+            
+        except Exception as e:
+            stats['success'] = False
+            stats['error'] = str(e)
+            stats['end_time'] = datetime.now()
+            logger.error(f"   ❌ API extraction failed: {e}")
+            return None, stats
+    
+    # ═══════════════════════════════════════════════════════════════════════
+    # END PHASE 1 METHODS
+    # ═══════════════════════════════════════════════════════════════════════
     
     def extract_all(self) -> Dict[str, pd.DataFrame]:
         """

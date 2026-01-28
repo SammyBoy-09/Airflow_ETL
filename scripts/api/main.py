@@ -33,14 +33,17 @@ API Documentation:
 """
 
 from datetime import datetime
-from fastapi import FastAPI, Request, status
+from fastapi import FastAPI, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from sqlalchemy.exc import SQLAlchemyError
+from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
 
 from .config import config
 from .routes import health_router, dags_router, metadata_router, logs_router
+from .routes_ingestion import router as ingestion_router  # PHASE 1
+from .routes_quality import router as quality_router  # PHASE 1 - T0012
 
 
 # ========================================
@@ -58,6 +61,22 @@ app = FastAPI(
         "syntaxHighlight.theme": "monokai",
         "tryItOutEnabled": True
     }
+)
+
+# ========================================
+# Phase 3 - Monitoring & Observability
+# ========================================
+
+REQUEST_COUNT = Counter(
+    "api_requests_total",
+    "Total API requests",
+    ["method", "path", "status"]
+)
+
+REQUEST_LATENCY = Histogram(
+    "api_request_latency_seconds",
+    "API request latency in seconds",
+    ["method", "path"]
 )
 
 
@@ -141,12 +160,26 @@ async def log_requests(request: Request, call_next):
     
     # Log request details
     print(f"{request.method} {request.url.path} - {response.status_code} - {duration:.3f}s")
+
+    # Prometheus metrics
+    REQUEST_COUNT.labels(request.method, request.url.path, str(response.status_code)).inc()
+    REQUEST_LATENCY.labels(request.method, request.url.path).observe(duration)
     
     # Add custom headers
     response.headers["X-Process-Time"] = f"{duration:.3f}s"
     response.headers["X-API-Version"] = config.VERSION
     
     return response
+
+
+# ========================================
+# Phase 3 - Prometheus Metrics Endpoint
+# ========================================
+
+@app.get("/metrics", include_in_schema=False)
+def metrics():
+    """Prometheus metrics endpoint"""
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
 # ========================================
@@ -164,6 +197,12 @@ app.include_router(metadata_router)
 
 # Log endpoints (T0036)
 app.include_router(logs_router)
+
+# Phase 1 ingestion endpoints (TEAM 2)
+app.include_router(ingestion_router)
+
+# Phase 1 quality & validation endpoints (TEAM 2 - T0012)
+app.include_router(quality_router)
 
 
 # ========================================

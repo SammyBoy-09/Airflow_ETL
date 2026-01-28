@@ -40,9 +40,27 @@ import logging
 from typing import Dict, Any, Optional, List
 from pathlib import Path
 from datetime import datetime
+import sys
 from sqlalchemy import create_engine, text, MetaData, Table, inspect
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError
+
+# Ensure /opt/airflow/scripts is importable before importing utils
+PROJECT_ROOT = Path(__file__).parent.parent
+SCRIPTS_ROOT = Path(__file__).parent
+if str(SCRIPTS_ROOT) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_ROOT))
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from utils.governance_utils import (
+    ensure_governance_tables,
+    log_audit_event,
+    log_lineage,
+    apply_classification_from_config,
+    log_schema_validation,
+)
+from utils.schema_validation import validate_dataframe
 
 # Configure logging
 logging.basicConfig(
@@ -52,12 +70,13 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Project paths
-PROJECT_ROOT = Path(__file__).parent.parent
 DATA_PROCESSED = PROJECT_ROOT / "data" / "processed"
 
 # Database configuration
+# Use 'postgres' for Docker containers, 'localhost' for local development
+import os
 DB_CONFIG = {
-    'host': 'localhost',
+    'host': os.getenv('POSTGRES_HOST', 'postgres'),  # Default to 'postgres' for Docker
     'port': 5432,
     'database': 'airflow',
     'user': 'airflow',
@@ -162,6 +181,7 @@ class DatabaseLoader:
         self.engine: Optional[Engine] = None
         self.load_stats: Dict[str, Dict[str, Any]] = {}
         self.rejected_records: Dict[str, pd.DataFrame] = {}
+        self.source_locations: Dict[str, str] = {}
         
         logger.info(f"▶ DatabaseLoader initialized")
         logger.info(f"   Connection: {DB_CONFIG['host']}:{DB_CONFIG['port']}/{DB_CONFIG['database']}")
@@ -177,11 +197,11 @@ class DatabaseLoader:
                     pool_pre_ping=True
                 )
                 # Test connection and create schema
-                with self.engine.connect() as conn:
+                with self.engine.begin() as conn:
                     conn.execute(text("SELECT 1"))
                     # Create etl_output schema if it doesn't exist
                     conn.execute(text(f"CREATE SCHEMA IF NOT EXISTS {self.ETL_SCHEMA}"))
-                    conn.commit()
+                ensure_governance_tables(self.engine, schema=self.ETL_SCHEMA)
                 logger.info(f"✅ Database connection established (schema: {self.ETL_SCHEMA})")
             except SQLAlchemyError as e:
                 logger.error(f"❌ Database connection failed: {e}")
@@ -243,9 +263,8 @@ class DatabaseLoader:
                 )
             """
             
-            with engine.connect() as conn:
+            with engine.begin() as conn:
                 conn.execute(text(create_sql))
-                conn.commit()
             
             logger.info(f"   ✅ Created table {full_table_name}")
             return True
@@ -257,7 +276,9 @@ class DatabaseLoader:
     def load_table(self, 
                    table_key: str, 
                    df: pd.DataFrame,
-                   mode: str = 'replace') -> Dict[str, Any]:
+                   mode: str = 'replace',
+                   source_location: Optional[str] = None,
+                   context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
         Load a single table to database (etl_output schema)
         
@@ -286,21 +307,72 @@ class DatabaseLoader:
             'start_time': datetime.now(),
             'success': False
         }
+
+        context = context or {}
+        dag = context.get("dag")
+        dag_run = context.get("dag_run")
+        dag_id = dag.dag_id if dag else None
+        run_id = context.get("run_id") or (dag_run.run_id if dag_run else None)
         
         logger.info(f"▶ Loading {table_key} → {full_table_name} ({mode} mode)")
         
         try:
             engine = self.connect()
+
+            log_audit_event(
+                engine=engine,
+                event_type="load_start",
+                entity_type="table",
+                entity_id=full_table_name,
+                status="started",
+                details={"mode": mode, "input_rows": len(df)},
+                dag_id=dag_id,
+                run_id=run_id,
+                schema=self.ETL_SCHEMA,
+            )
             
             # Ensure table exists
             self.create_table(table_key, df)
+
+            # Apply data classification tags (from config)
+            apply_classification_from_config(engine, table_name, schema=self.ETL_SCHEMA)
+
+            # Schema validation (sample-based)
+            sample_rows = df.head(1000).to_dict(orient="records")
+            validation = validate_dataframe(table_key, sample_rows)
+            if validation.get("status") != "skipped":
+                log_schema_validation(
+                    engine=engine,
+                    table_name=table_name,
+                    sample_size=len(sample_rows),
+                    error_count=validation.get("error_count", 0),
+                    errors=validation.get("errors", []),
+                    status=validation.get("status", "pass"),
+                    dag_id=dag_id,
+                    run_id=run_id,
+                    schema=self.ETL_SCHEMA,
+                )
+                if validation.get("status") == "fail":
+                    log_audit_event(
+                        engine=engine,
+                        event_type="schema_validation",
+                        entity_type="table",
+                        entity_id=full_table_name,
+                        status="warning",
+                        details={
+                            "sample_size": len(sample_rows),
+                            "error_count": validation.get("error_count", 0),
+                        },
+                        dag_id=dag_id,
+                        run_id=run_id,
+                        schema=self.ETL_SCHEMA,
+                    )
             
             # Handle different modes
             if mode == 'replace':
                 # Truncate existing data
-                with engine.connect() as conn:
+                with engine.begin() as conn:
                     conn.execute(text(f"TRUNCATE TABLE {full_table_name}"))
-                    conn.commit()
                 logger.info(f"   Truncated existing data")
             
             # Insert data in batches
@@ -341,6 +413,34 @@ class DatabaseLoader:
             stats['success'] = loaded > 0
             stats['end_time'] = datetime.now()
             stats['duration_seconds'] = (stats['end_time'] - stats['start_time']).total_seconds()
+
+            log_lineage(
+                engine=engine,
+                source_type="file" if source_location else "unknown",
+                source_location=source_location,
+                target_table=full_table_name,
+                transformation="cleaning+transform+load",
+                row_count=loaded,
+                dag_id=dag_id,
+                run_id=run_id,
+                schema=self.ETL_SCHEMA,
+            )
+
+            log_audit_event(
+                engine=engine,
+                event_type="load_complete",
+                entity_type="table",
+                entity_id=full_table_name,
+                status="success" if stats['success'] else "failed",
+                details={
+                    "loaded_rows": loaded,
+                    "rejected_rows": stats['rejected_rows'],
+                    "duration_seconds": stats['duration_seconds'],
+                },
+                dag_id=dag_id,
+                run_id=run_id,
+                schema=self.ETL_SCHEMA,
+            )
             
             logger.info(f"   ✅ Loaded {loaded:,}/{len(df):,} rows in {stats['duration_seconds']:.2f}s")
             
@@ -349,13 +449,27 @@ class DatabaseLoader:
             stats['error'] = str(e)
             stats['end_time'] = datetime.now()
             logger.error(f"   ❌ Load failed: {e}")
+
+            if self.engine:
+                log_audit_event(
+                    engine=self.engine,
+                    event_type="load_error",
+                    entity_type="table",
+                    entity_id=full_table_name,
+                    status="failed",
+                    details={"error": str(e)},
+                    dag_id=dag_id,
+                    run_id=run_id,
+                    schema=self.ETL_SCHEMA,
+                )
         
         self.load_stats[table_key] = stats
         return stats
     
     def load_all(self, 
                  cleaned_tables: Dict[str, pd.DataFrame] = None,
-                 mode: str = 'replace') -> Dict[str, Dict[str, Any]]:
+                 mode: str = 'replace',
+                 context: Optional[Dict[str, Any]] = None) -> Dict[str, Dict[str, Any]]:
         """
         Load all cleaned tables to database
         
@@ -383,7 +497,14 @@ class DatabaseLoader:
             source_key = table_key.replace('_cleaned', '')
             
             if source_key in cleaned_tables:
-                self.load_table(table_key, cleaned_tables[source_key], mode)
+                source_location = self.source_locations.get(source_key)
+                self.load_table(
+                    table_key,
+                    cleaned_tables[source_key],
+                    mode,
+                    source_location=source_location,
+                    context=context,
+                )
             else:
                 logger.warning(f"   ⚠️ No data for {table_key}")
         
@@ -409,6 +530,7 @@ class DatabaseLoader:
             
             if csv_file.exists():
                 data[source_key] = pd.read_csv(csv_file)
+                self.source_locations[source_key] = str(csv_file)
                 logger.info(f"   ✅ Loaded {source_key}: {len(data[source_key]):,} rows")
             else:
                 logger.warning(f"   ⚠️ {csv_file.name} not found")
@@ -470,7 +592,7 @@ def load_all_tables(cleaned_tables: Dict[str, pd.DataFrame] = None,
     loader = DatabaseLoader()
     
     # Load all tables
-    stats = loader.load_all(cleaned_tables, mode)
+    stats = loader.load_all(cleaned_tables, mode, context=context)
     
     # Save rejected records if any
     rejected_files = loader.save_rejected_records()
@@ -492,7 +614,7 @@ def load_single_table(table_key: str,
     Airflow task callable: Load a single table
     """
     loader = DatabaseLoader()
-    stats = loader.load_table(table_key, df, mode)
+    stats = loader.load_table(table_key, df, mode, context=context)
     loader.disconnect()
     return stats
 

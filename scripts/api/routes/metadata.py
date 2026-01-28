@@ -112,44 +112,27 @@ async def get_table_statistics(
 
 
 # ========================================
-# Team 1 - T0035: Get Pipeline Metrics Endpoint
+# Team 1 - T0035: Get Pipeline Metrics Endpoint  
 # ========================================
 
 @router.get(
     "/metrics",
     summary="Get Pipeline Metrics",
-    description="Get key pipeline performance metrics"
+    description="Get ETL metrics with rows extracted, loaded, and rejected per table"
 )
 async def get_pipeline_metrics(
     api_key: str = Depends(get_api_key)
 ):
     """
-    Get key performance metrics for the pipeline.
-    
-    Returns:
-        Dictionary with pipeline metrics
+    Get ETL metrics from dag_run_summary table - RETURNS ARRAY DIRECTLY.
     """
+    print("=" * 80)
+    print("[METRICS] Endpoint called!")
+    print("=" * 80)
+    
+    # Return the actual ETL metrics from get_etl_metrics
     client = AirflowClient()
+    metrics = client.get_etl_metrics()
     
-    # Get DAG counts
-    dags = client.list_dags()
-    
-    # Get run statistics
-    today_runs = client.get_runs_today()
-    
-    # Calculate success rate
-    total_today = today_runs["total"]
-    success_today = today_runs["success"]
-    success_rate = (success_today / total_today * 100) if total_today > 0 else 0
-    
-    return {
-        "metrics": {
-            "total_dags": len(dags),
-            "active_dags": sum(1 for dag in dags if not dag.is_paused),
-            "runs_today": total_today,
-            "success_rate": round(success_rate, 2),
-            "successful_runs": success_today,
-            "failed_runs": today_runs["failed"]
-        },
-        "timestamp": datetime.now().isoformat()
-    }
+    print(f"[METRICS] Returning: {metrics}")
+    return metrics

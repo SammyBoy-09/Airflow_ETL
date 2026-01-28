@@ -24,6 +24,15 @@ from pydantic import BaseModel, Field
 # Team 1 - T0034: DAG Information Model
 # ========================================
 
+class LatestRunInfo(BaseModel):
+    """Latest run summary for a DAG"""
+    run_id: str = Field(..., description="Run identifier")
+    state: str = Field(..., description="Run state")
+    execution_date: datetime = Field(..., description="Execution timestamp")
+    start_date: Optional[datetime] = Field(None, description="Start time")
+    end_date: Optional[datetime] = Field(None, description="End time")
+
+
 class DAGInfo(BaseModel):
     """Basic DAG information"""
     dag_id: str = Field(..., description="Unique DAG identifier")
@@ -35,6 +44,7 @@ class DAGInfo(BaseModel):
     owners: List[str] = Field(default_factory=list, description="DAG owners")
     last_run_date: Optional[datetime] = Field(None, description="Last execution date")
     next_run_date: Optional[datetime] = Field(None, description="Next scheduled run")
+    latest_run: Optional[LatestRunInfo] = Field(None, description="Latest run information")
     
     class Config:
         json_schema_extra = {

@@ -41,13 +41,18 @@ MOVED TO MAIN SCRIPTS:
 """
 
 # Phase 2 - Data Quality (Generic)
-from .validation_utils import DataValidator
+# NOTE: Lazy imports to prevent DAG import timeout
+# Import these modules only when actually needed in your code:
+#   from utils.validation_utils import DataValidator
+#   from utils.aggregation_utils import AggregationEngine
+# etc.
 
-# Phase 3 - Transformations (Generic)
-from .aggregation_utils import AggregationEngine
-from .normalization_utils import NormalizationEngine
-from .feature_engineering_utils import FeatureEngine
-from .datetime_utils import DateTimeEngine
+# Uncomment below for direct imports (may cause DAG import timeouts):
+# from .validation_utils import DataValidator
+# from .aggregation_utils import AggregationEngine
+# from .normalization_utils import NormalizationEngine
+# from .feature_engineering_utils import FeatureEngine
+# from .datetime_utils import DateTimeEngine
 from .transformation_orchestrator import TransformationOrchestrator
 
 # Phase 4 - Loading (Generic)

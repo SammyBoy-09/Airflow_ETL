@@ -28,7 +28,6 @@ from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.operators.empty import EmptyOperator
-from airflow.sensors.external_task import ExternalTaskSensor
 from airflow.models import DagRun
 from airflow.utils.state import DagRunState
 
@@ -54,7 +53,9 @@ def get_latest_execution_date(dt, external_dag_id):
 from dag_base import (
     DEFAULT_ARGS, SCHEDULE_MIDNIGHT_IST, START_DATE,
     send_success_email, send_failure_email,
-    DATA_RAW, DATA_PROCESSED, get_connection_string
+    DATA_RAW, DATA_PROCESSED, get_connection_string,
+    DATA_GOLD, copy_to_medallion,
+    build_external_task_sensor
 )
 
 
@@ -249,6 +250,11 @@ def generate_all_reports(**context):
         print(f"⚠️ Report 11: DAG Run Summary skipped - {e}")
     
     print(f"\n🎉 Generated {len(reports_generated)} reports successfully!")
+
+    # Gold layer copy (reports)
+    for report_name in reports_generated:
+        source_path = f"{reports_dir}/{report_name}"
+        copy_to_medallion(source_path, DATA_GOLD, report_name)
     
     context['ti'].xcom_push(key='reports_generated', value=reports_generated)
     context['ti'].xcom_push(key='reports_count', value=len(reports_generated))
@@ -291,65 +297,50 @@ with DAG(
     sensor_poke = 30  # Check every 30 seconds
     
     # Wait for all table DAGs to complete
-    wait_for_customers = ExternalTaskSensor(
+    wait_for_customers = build_external_task_sensor(
         task_id='wait_for_customers',
         external_dag_id='etl_customers',
         external_task_id='end',
-        allowed_states=['success'],
-        failed_states=['failed', 'skipped'],
-        execution_date_fn=lambda dt: get_latest_execution_date(dt, 'etl_customers'),
         timeout=sensor_timeout,
         poke_interval=sensor_poke,
-        mode='reschedule',
     )
+    wait_for_customers.execution_date_fn = lambda dt: get_latest_execution_date(dt, 'etl_customers')
     
-    wait_for_products = ExternalTaskSensor(
+    wait_for_products = build_external_task_sensor(
         task_id='wait_for_products',
         external_dag_id='etl_products',
         external_task_id='end',
-        allowed_states=['success'],
-        failed_states=['failed', 'skipped'],
-        execution_date_fn=lambda dt: get_latest_execution_date(dt, 'etl_products'),
         timeout=sensor_timeout,
         poke_interval=sensor_poke,
-        mode='reschedule',
     )
+    wait_for_products.execution_date_fn = lambda dt: get_latest_execution_date(dt, 'etl_products')
     
-    wait_for_stores = ExternalTaskSensor(
+    wait_for_stores = build_external_task_sensor(
         task_id='wait_for_stores',
         external_dag_id='etl_stores',
         external_task_id='end',
-        allowed_states=['success'],
-        failed_states=['failed', 'skipped'],
-        execution_date_fn=lambda dt: get_latest_execution_date(dt, 'etl_stores'),
         timeout=sensor_timeout,
         poke_interval=sensor_poke,
-        mode='reschedule',
     )
+    wait_for_stores.execution_date_fn = lambda dt: get_latest_execution_date(dt, 'etl_stores')
     
-    wait_for_exchange_rates = ExternalTaskSensor(
+    wait_for_exchange_rates = build_external_task_sensor(
         task_id='wait_for_exchange_rates',
         external_dag_id='etl_exchange_rates',
         external_task_id='end',
-        allowed_states=['success'],
-        failed_states=['failed', 'skipped'],
-        execution_date_fn=lambda dt: get_latest_execution_date(dt, 'etl_exchange_rates'),
         timeout=sensor_timeout,
         poke_interval=sensor_poke,
-        mode='reschedule',
     )
+    wait_for_exchange_rates.execution_date_fn = lambda dt: get_latest_execution_date(dt, 'etl_exchange_rates')
     
-    wait_for_sales = ExternalTaskSensor(
+    wait_for_sales = build_external_task_sensor(
         task_id='wait_for_sales',
         external_dag_id='etl_sales',
         external_task_id='end',
-        allowed_states=['success'],
-        failed_states=['failed', 'skipped'],
-        execution_date_fn=lambda dt: get_latest_execution_date(dt, 'etl_sales'),
         timeout=sensor_timeout,
         poke_interval=sensor_poke,
-        mode='reschedule',
     )
+    wait_for_sales.execution_date_fn = lambda dt: get_latest_execution_date(dt, 'etl_sales')
     
     generate_reports = PythonOperator(
         task_id='generate_reports',

@@ -1,5 +1,3 @@
-version: "3.8"
-
 # Multi-Source ETL Pipeline with Airflow
 # Services: PostgreSQL, Redis, Airflow Webserver, Airflow Scheduler
 # Usage: docker-compose up -d
@@ -91,7 +89,7 @@ services:
       AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY}
       AIRFLOW__CORE__LOAD_EXAMPLES: "False"
-      _PIP_ADDITIONAL_REQUIREMENTS: "openpyxl pandas sqlalchemy psycopg2-binary pyyaml"
+      _PIP_ADDITIONAL_REQUIREMENTS: "openpyxl pandas sqlalchemy psycopg2-binary pyyaml pydantic"
       AIRFLOW_UID: "${AIRFLOW_UID}"
     entrypoint: /bin/bash
     command:
@@ -126,6 +124,11 @@ services:
       AIRFLOW__WEBSERVER__WORKERS: "2"
       AIRFLOW__WEBSERVER__RBAC: "True"
       AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+      # Performance optimization - increased parallelism for 5-8 min target
+      AIRFLOW__CORE__PARALLELISM: "32"
+      AIRFLOW__CORE__MAX_ACTIVE_TASKS_PER_DAG: "16"
+      AIRFLOW__CORE__MAX_ACTIVE_RUNS_PER_DAG: "3"
+      AIRFLOW__CORE__DAG_CONCURRENCY: "16"
       # Email/SMTP Configuration
       AIRFLOW__SMTP__SMTP_HOST: "${SMTP_HOST:-smtp.gmail.com}"
       AIRFLOW__SMTP__SMTP_PORT: "${SMTP_PORT:-587}"
@@ -136,7 +139,12 @@ services:
       AIRFLOW__SMTP__SMTP_SSL: "False"
       # Timezone
       AIRFLOW__CORE__DEFAULT_TIMEZONE: "Asia/Kolkata"
-      _PIP_ADDITIONAL_REQUIREMENTS: "openpyxl pandas sqlalchemy psycopg2-binary pyyaml"
+      # StatsD metrics (Phase 3)
+      AIRFLOW__METRICS__STATSD_ON: "True"
+      AIRFLOW__METRICS__STATSD_HOST: "statsd-exporter"
+      AIRFLOW__METRICS__STATSD_PORT: "9125"
+      AIRFLOW__METRICS__STATSD_PREFIX: "airflow"
+      _PIP_ADDITIONAL_REQUIREMENTS: "openpyxl pandas sqlalchemy psycopg2-binary pyyaml pydantic"
       AIRFLOW_UID: "${AIRFLOW_UID}"
       PYTHONUNBUFFERED: "1"
     volumes:
@@ -172,6 +180,11 @@ services:
       AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY}
       AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+      # Performance optimization - increased parallelism for 5-8 min target
+      AIRFLOW__CORE__PARALLELISM: "32"
+      AIRFLOW__CORE__MAX_ACTIVE_TASKS_PER_DAG: "16"
+      AIRFLOW__CORE__MAX_ACTIVE_RUNS_PER_DAG: "3"
+      AIRFLOW__CORE__DAG_CONCURRENCY: "16"
       # Email/SMTP Configuration
       AIRFLOW__SMTP__SMTP_HOST: "${SMTP_HOST:-smtp.gmail.com}"
       AIRFLOW__SMTP__SMTP_PORT: "${SMTP_PORT:-587}"
@@ -182,7 +195,12 @@ services:
       AIRFLOW__SMTP__SMTP_SSL: "False"
       # Timezone
       AIRFLOW__CORE__DEFAULT_TIMEZONE: "Asia/Kolkata"
-      _PIP_ADDITIONAL_REQUIREMENTS: "openpyxl pandas sqlalchemy psycopg2-binary pyyaml"
+      # StatsD metrics (Phase 3)
+      AIRFLOW__METRICS__STATSD_ON: "True"
+      AIRFLOW__METRICS__STATSD_HOST: "statsd-exporter"
+      AIRFLOW__METRICS__STATSD_PORT: "9125"
+      AIRFLOW__METRICS__STATSD_PREFIX: "airflow"
+      _PIP_ADDITIONAL_REQUIREMENTS: "openpyxl pandas sqlalchemy psycopg2-binary pyyaml pydantic"
       AIRFLOW_UID: "${AIRFLOW_UID}"
       PYTHONUNBUFFERED: "1"
     volumes:
@@ -242,8 +260,11 @@ services:
           uvicorn[standard]==0.27.0 \
           sqlalchemy==2.0.25 \
           psycopg2-binary \
+          pandas==2.1.4 \
+          pyyaml==6.0.1 \
           python-multipart==0.0.6 \
-          httpx==0.26.0
+          httpx==0.26.0 \
+          prometheus_client==0.19.0
         echo "Starting FastAPI server..."
         uvicorn scripts.api.main:app --host 0.0.0.0 --port 8000
     healthcheck:
@@ -256,12 +277,139 @@ services:
       - etl-network
     restart: unless-stopped
 
+  # Phase 3 - Metrics: StatsD Exporter for Airflow
+  statsd-exporter:
+    image: prom/statsd-exporter:v0.26.1
+    ports:
+      - "9102:9102"
+      - "9125:9125/udp"
+    volumes:
+      - ./statsd-mapping.yml:/etc/statsd-exporter/mapping.yml:ro
+    command:
+      - "--statsd.mapping-config=/etc/statsd-exporter/mapping.yml"
+    networks:
+      - etl-network
+    restart: unless-stopped
+
+  # Phase 3 - Monitoring: Prometheus
+  prometheus:
+    image: prom/prometheus:v2.49.1
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./alert_rules.yml:/etc/prometheus/alert_rules.yml:ro
+    depends_on:
+      - api
+    networks:
+      - etl-network
+    restart: unless-stopped
+
+  # Phase 3 - Alerting: Alertmanager
+  alertmanager:
+    image: prom/alertmanager:v0.26.0
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    environment:
+      SMTP_HOST: "${SMTP_HOST}"
+      SMTP_PORT: "${SMTP_PORT}"
+      SMTP_USER: "${SMTP_USER}"
+      SMTP_PASSWORD: "${SMTP_PASSWORD}"
+      SMTP_MAIL_FROM: "${SMTP_MAIL_FROM}"
+      ALERT_EMAIL_TO: "${ALERT_EMAIL_TO}"
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        sed -e "s|__SMTP_HOST__|$SMTP_HOST|g" \
+            -e "s|__SMTP_PORT__|$SMTP_PORT|g" \
+            -e "s|__SMTP_USER__|$SMTP_USER|g" \
+            -e "s|__SMTP_PASSWORD__|$SMTP_PASSWORD|g" \
+            -e "s|__SMTP_MAIL_FROM__|$SMTP_MAIL_FROM|g" \
+            -e "s|__ALERT_EMAIL_TO__|$ALERT_EMAIL_TO|g" \
+            /etc/alertmanager/alertmanager.yml > /etc/alertmanager/alertmanager.rendered.yml
+        exec alertmanager --config.file=/etc/alertmanager/alertmanager.rendered.yml
+    networks:
+      - etl-network
+    restart: unless-stopped
+
+  # Phase 3 - Monitoring: Grafana
+  grafana:
+    image: grafana/grafana:10.2.3
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: "admin"
+      GF_SECURITY_ADMIN_PASSWORD: "admin"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+    depends_on:
+      - prometheus
+      - loki
+    networks:
+      - etl-network
+    restart: unless-stopped
+
+  # Phase 3 - Log Aggregation: Loki
+  loki:
+    image: grafana/loki:2.9.4
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/loki-config.yaml
+    user: "0:0"
+    volumes:
+      - ./loki-config.yaml:/etc/loki/loki-config.yaml:ro
+      - loki-data:/tmp/loki
+    networks:
+      - etl-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3100/ready || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Phase 3 - Log Aggregation: Promtail
+  promtail:
+    image: grafana/promtail:2.9.4
+    command: -config.file=/etc/promtail/promtail-config.yaml
+    volumes:
+      - ../logs:/opt/airflow/logs:ro
+      - ./promtail-config.yaml:/etc/promtail/promtail-config.yaml:ro
+    depends_on:
+      loki:
+        condition: service_healthy
+    networks:
+      - etl-network
+    restart: unless-stopped
+
+  # Phase 3 - API Health Monitoring: Blackbox Exporter
+  blackbox:
+    image: prom/blackbox-exporter:v0.24.0
+    ports:
+      - "9115:9115"
+    volumes:
+      - ./blackbox.yml:/etc/blackbox/blackbox.yml:ro
+    command:
+      - "--config.file=/etc/blackbox/blackbox.yml"
+    networks:
+      - etl-network
+    restart: unless-stopped
+
 volumes:
   postgres-db:
     driver: local
   redis-data:
     driver: local
   pgadmin-data:
+    driver: local
+  grafana-data:
+    driver: local
+  loki-data:
     driver: local
 
 networks:

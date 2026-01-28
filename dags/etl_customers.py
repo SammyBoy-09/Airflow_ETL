@@ -30,7 +30,8 @@ sys.path.insert(0, '/opt/airflow/scripts')
 from dag_base import (
     DEFAULT_ARGS, DAG_CONFIG, SCHEDULE_MIDNIGHT_IST, START_DATE,
     send_success_email, send_failure_email,
-    DATA_RAW, DATA_STAGING, DATA_PROCESSED, get_connection_string
+    DATA_RAW, DATA_STAGING, DATA_PROCESSED, get_connection_string,
+    DATA_BRONZE, DATA_SILVER, copy_to_medallion
 )
 
 
@@ -54,6 +55,9 @@ def extract_customers(**context):
     
     # Save to staging
     df.to_csv(staging_file, index=False)
+
+    # Bronze layer copy
+    copy_to_medallion(staging_file, DATA_BRONZE, 'customers_raw.csv')
     
     print(f"✅ Extracted {row_count:,} customers to staging")
     
@@ -154,6 +158,9 @@ def transform_customers(**context):
     
     # Save cleaned data
     df.to_csv(output_file, index=False)
+
+    # Silver layer copy
+    copy_to_medallion(output_file, DATA_SILVER, 'customers_cleaned.csv')
     
     print(f"✅ Transformed customers: {initial_rows:,} → {len(df):,} rows")
     print(f"   Duplicates removed: {duplicates_removed}")
@@ -169,7 +176,8 @@ def transform_customers(**context):
 def load_customers(**context):
     """Load customers to PostgreSQL"""
     import pandas as pd
-    from sqlalchemy import create_engine, text
+    from sqlalchemy import text
+    from Load import DatabaseLoader
     from datetime import datetime
     
     output_file = context['ti'].xcom_pull(key='output_file', task_ids='transform')
@@ -178,9 +186,8 @@ def load_customers(**context):
     # Read cleaned data
     df = pd.read_csv(output_file)
     
-    # Connect to database
-    conn_str = get_connection_string()
-    engine = create_engine(conn_str)
+    loader = DatabaseLoader()
+    engine = loader.connect()
     
     # Create schema if not exists (handle race condition)
     with engine.begin() as conn:
@@ -219,13 +226,13 @@ def load_customers(**context):
             )
         """))
     
-    # Load customers to database
-    df.to_sql(
-        'customers',
-        engine,
-        schema='etl_output',
-        if_exists='replace',
-        index=False
+    # Load customers to database (governance hooks included)
+    stats = loader.load_table(
+        'customers_cleaned',
+        df,
+        mode='replace',
+        source_location=output_file,
+        context=context
     )
     
     # Save rejected records (append)
@@ -261,11 +268,12 @@ def load_customers(**context):
         index=False
     )
     
-    print(f"✅ Loaded {len(df):,} customers to etl_output.customers")
+    print(f"✅ Loaded {stats.get('loaded_rows', len(df)):,} customers to etl_output.customers")
     
-    context['ti'].xcom_push(key='loaded_rows', value=len(df))
+    context['ti'].xcom_push(key='loaded_rows', value=stats.get('loaded_rows', len(df)))
     
-    return {'rows': len(df), 'table': 'etl_output.customers'}
+    loader.disconnect()
+    return {'rows': stats.get('loaded_rows', len(df)), 'table': 'etl_output.customers'}
 
 
 # ========================================

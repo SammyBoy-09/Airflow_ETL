@@ -281,11 +281,11 @@
                 <div class="section">
                     <h3>📊 DAG Operations</h3>
                     <div class="btn-group">
-                        <button onclick="showSection('list-dags')">List All DAGs</button>
-                        <button onclick="showSection('dag-status')">Get DAG Status</button>
-                        <button onclick="showSection('dag-runs')">Get DAG Runs</button>
-                        <button onclick="showSection('specific-run')">Get Specific Run</button>
-                        <button onclick="showSection('run-tasks')">Get Run Tasks</button>
+                        <button onclick="showSection('list-dags', this)">List All DAGs</button>
+                        <button onclick="showSection('dag-status', this)">Get DAG Status</button>
+                        <button onclick="showSection('dag-runs', this)">Get DAG Runs</button>
+                        <button onclick="showSection('specific-run', this)">Get Specific Run</button>
+                        <button onclick="showSection('run-tasks', this)">Get Run Tasks</button>
                     </div>
                 </div>
                 
@@ -303,9 +303,32 @@
                 <div class="section">
                     <h3>📝 Logs</h3>
                     <div class="btn-group">
-                        <button onclick="showSection('dag-logs')">List DAG Logs</button>
-                        <button onclick="showSection('run-logs')">Get Run Logs</button>
-                        <button onclick="showSection('task-logs')">Get Task Logs</button>
+                        <button onclick="showSection('dag-logs', this)">List DAG Logs</button>
+                        <button onclick="showSection('run-logs', this)">Get Run Logs</button>
+                        <button onclick="showSection('task-logs', this)">Get Task Logs</button>
+                    </div>
+                </div>
+                
+                <!-- PHASE 1: Data Ingestion -->
+                <div class="section">
+                    <h3>📥 Data Ingestion</h3>
+                    <div class="btn-group">
+                        <button onclick="getIngestionLogs()">Ingestion Logs</button>
+                        <button onclick="getApiConnections()">API Connections</button>
+                        <button onclick="getFileHistory()">File Watch History</button>
+                    </div>
+                </div>
+                
+                <!-- PHASE 1: Quality & Validation -->
+                <div class="section">
+                    <h3>✅ Data Quality</h3>
+                    <div class="btn-group">
+                        <button onclick="getQualitySummary()">Quality Summary</button>
+                        <button onclick="showSection('quality-scorecard', this)">Quality Scorecard</button>
+                        <button onclick="showSection('validation-results', this)">Validation Results</button>
+                        <button onclick="showSection('anomalies', this)">Detected Anomalies</button>
+                        <button onclick="showSection('data-profiles', this)">Data Profiles</button>
+                        <button onclick="showSection('quality-checks', this)">Quality Checks</button>
                     </div>
                 </div>
             </div>
@@ -471,27 +494,168 @@
                     <button class="action-btn" onclick="getTaskLogs()">🔍 Fetch Task Logs</button>
                     <div id="task-logs-response" class="response-container" style="margin-top: 20px;"></div>
                 </div>
+                
+                <!-- Quality Scorecard Section -->
+                <div id="quality-scorecard" class="hidden">
+                    <h2>📊 Quality Scorecard</h2>
+                    <p style="color: #666; margin-bottom: 20px;">View quality scores for all tables (Phase 1 - T0012)</p>
+                    <div class="filters">
+                        <div class="filter-group">
+                            <label for="scorecard-table">Table:</label>
+                            <select id="scorecard-table">
+                                <option value="all">All Tables</option>
+                                <option value="customers">customers</option>
+                                <option value="products">products</option>
+                                <option value="sales">sales</option>
+                                <option value="stores">stores</option>
+                                <option value="exchange_rates">exchange_rates</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button class="action-btn" onclick="getQualityScorecard()">🔍 View Scorecard</button>
+                    <div id="quality-scorecard-response" class="response-container" style="margin-top: 20px;"></div>
+                </div>
+                
+                <!-- Validation Results Section -->
+                <div id="validation-results" class="hidden">
+                    <h2>✅ Validation Results</h2>
+                    <p style="color: #666; margin-bottom: 20px;">Column-level validation results (T0008)</p>
+                    <div class="filters">
+                        <div class="input-group">
+                            <label>Filter by Table:</label>
+                            <select id="validation-table-filter">
+                                <option value="">All Tables</option>
+                                <option value="customers">Customers</option>
+                                <option value="products">Products</option>
+                                <option value="sales">Sales</option>
+                                <option value="stores">Stores</option>
+                                <option value="exchange_rates">Exchange Rates</option>
+                            </select>
+                        </div>
+                        <div class="input-group">
+                            <label>
+                                <input type="checkbox" id="validation-failed-only"> Show only failed validations
+                            </label>
+                        </div>
+                    </div>
+                    <button class="action-btn" onclick="getValidationResults()">🔍 Fetch Results</button>
+                    <div id="validation-results-response" class="response-container" style="margin-top: 20px;"></div>
+                </div>
+                
+                <!-- Anomalies Section -->
+                <div id="anomalies" class="hidden">
+                    <h2>🚨 Detected Anomalies</h2>
+                    <p style="color: #666; margin-bottom: 20px;">Outliers detected using Z-score method (T0011)</p>
+                    <div class="filters">
+                        <div class="input-group">
+                            <label>Filter by Table:</label>
+                            <select id="anomalies-table-filter">
+                                <option value="">All Tables</option>
+                                <option value="customers">Customers</option>
+                                <option value="products">Products</option>
+                                <option value="sales">Sales</option>
+                                <option value="stores">Stores</option>
+                            </select>
+                        </div>
+                        <div class="input-group">
+                            <label>Limit Results:</label>
+                            <select id="anomalies-limit">
+                                <option value="50">50</option>
+                                <option value="100" selected>100</option>
+                                <option value="200">200</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button class="action-btn" onclick="getAnomalies()">🔍 Fetch Anomalies</button>
+                    <div id="anomalies-response" class="response-container" style="margin-top: 20px;"></div>
+                </div>
+                
+                <!-- Data Profiles Section -->
+                <div id="data-profiles" class="hidden">
+                    <h2>📈 Data Profiles</h2>
+                    <p style="color: #666; margin-bottom: 20px;">Statistical profiling information (T0009)</p>
+                    <div class="input-group">
+                        <label>Select Table:</label>
+                        <select id="profiles-table-select">
+                            <option value="">All Tables</option>
+                            <option value="customers">Customers</option>
+                            <option value="products">Products</option>
+                            <option value="sales">Sales</option>
+                            <option value="stores">Stores</option>
+                            <option value="exchange_rates">Exchange Rates</option>
+                        </select>
+                    </div>
+                    <button class="action-btn" onclick="getDataProfiles()">🔍 View Profiles</button>
+                    <div id="data-profiles-response" class="response-container" style="margin-top: 20px;"></div>
+                </div>
+                
+                <!-- Quality Checks Section -->
+                <div id="quality-checks" class="hidden">
+                    <h2>🎯 Quality Check Results</h2>
+                    <p style="color: #666; margin-bottom: 20px;">Quality rule execution results (T0010)</p>
+                    <div class="filters">
+                        <div class="input-group">
+                            <label>Filter by Table:</label>
+                            <select id="quality-checks-table-filter">
+                                <option value="">All Tables</option>
+                                <option value="customers">Customers</option>
+                                <option value="products">Products</option>
+                                <option value="sales">Sales</option>
+                                <option value="stores">Stores</option>
+                                <option value="exchange_rates">Exchange Rates</option>
+                            </select>
+                        </div>
+                        <div class="input-group">
+                            <label>
+                                <input type="checkbox" id="quality-checks-failed-only"> Show only failed checks
+                            </label>
+                        </div>
+                    </div>
+                    <button class="action-btn" onclick="getQualityChecks()">🔍 Fetch Results</button>
+                    <div id="quality-checks-response" class="response-container" style="margin-top: 20px;"></div>
+                </div>
             </div>
         </div>
     </div>
     
     <script>
         let dagsCache = [];
+
+        window.addEventListener('DOMContentLoaded', () => {
+            showSection('welcome');
+        });
         
-        function showSection(sectionId) {
-            // Hide all sections
+        function clearResponses() {
+            document.querySelectorAll('.response-container').forEach(container => {
+                container.innerHTML = '';
+            });
+        }
+
+        function showSection(sectionId, btn) {
+            // Hide all sections (force display none to avoid stacking)
             document.querySelectorAll('.main-content > div').forEach(div => {
                 div.classList.add('hidden');
+                div.style.display = 'none';
             });
             
             // Show selected section
-            document.getElementById(sectionId).classList.remove('hidden');
+            const selectedSection = document.getElementById(sectionId);
+            if (selectedSection) {
+                selectedSection.classList.remove('hidden');
+                selectedSection.style.display = 'block';
+            }
             
             // Update active button
             document.querySelectorAll('.sidebar button').forEach(btn => {
                 btn.classList.remove('active');
             });
-            event.target.classList.add('active');
+            const activeButton = btn || (window.event ? window.event.target : null);
+            if (activeButton) {
+                activeButton.classList.add('active');
+            }
+
+            // Clear previous responses to avoid stacking
+            clearResponses();
             
             // Auto-load DAGs for selects if not already loaded
             if (dagsCache.length === 0) {
@@ -531,11 +695,8 @@
         }
         
         async function checkHealth() {
+            showSection('welcome');
             displayResponse('welcome', {}, 'loading');
-            document.getElementById('welcome').classList.remove('hidden');
-            document.querySelectorAll('.main-content > div:not(#welcome)').forEach(div => {
-                div.classList.add('hidden');
-            });
             
             const response = await fetch('/api/health');
             const data = await response.json();
@@ -743,11 +904,7 @@
         }
         
         async function getMetadataSummary() {
-            document.getElementById('welcome').classList.remove('hidden');
-            document.querySelectorAll('.main-content > div:not(#welcome)').forEach(div => {
-                div.classList.add('hidden');
-            });
-            
+            showSection('welcome');
             displayResponse('welcome', {}, 'loading');
             const response = await fetch('/api/metadata/summary');
             const data = await response.json();
@@ -755,11 +912,7 @@
         }
         
         async function getTableStats() {
-            document.getElementById('welcome').classList.remove('hidden');
-            document.querySelectorAll('.main-content > div:not(#welcome)').forEach(div => {
-                div.classList.add('hidden');
-            });
-            
+            showSection('welcome');
             displayResponse('welcome', {}, 'loading');
             const response = await fetch('/api/metadata/tables');
             const data = await response.json();
@@ -767,11 +920,7 @@
         }
         
         async function getMetrics() {
-            document.getElementById('welcome').classList.remove('hidden');
-            document.querySelectorAll('.main-content > div:not(#welcome)').forEach(div => {
-                div.classList.add('hidden');
-            });
-            
+            showSection('welcome');
             displayResponse('welcome', {}, 'loading');
             const response = await fetch('/api/metadata/metrics');
             const data = await response.json();
@@ -821,6 +970,155 @@
             const data = await response.json();
             displayResponse('task-logs-response', data);
         }
+
+        // ============================================================================
+        // Phase 1: Data Ingestion Functions (T0003, T0004, T0005)
+        // ============================================================================
+        
+        async function getIngestionLogs() {
+            try {
+                showSection('welcome');
+                displayResponse('welcome', {}, 'loading');
+                const response = await fetch('/api/ingestion/logs');
+                const data = await response.json();
+                displayResponse('welcome', data);
+            } catch (error) {
+                displayResponse('welcome', { error: error.message });
+            }
+        }
+
+        async function getApiConnections() {
+            try {
+                showSection('welcome');
+                displayResponse('welcome', {}, 'loading');
+                const response = await fetch('/api/ingestion/connections');
+                const data = await response.json();
+                displayResponse('welcome', data);
+            } catch (error) {
+                displayResponse('welcome', { error: error.message });
+            }
+        }
+
+        async function getFileHistory() {
+            try {
+                showSection('welcome');
+                displayResponse('welcome', {}, 'loading');
+                const response = await fetch('/api/ingestion/file-history');
+                const data = await response.json();
+                displayResponse('welcome', data);
+            } catch (error) {
+                displayResponse('welcome', { error: error.message });
+            }
+        }
+
+        // ============================================================================
+        // Phase 1: Data Quality Functions (T0008, T0009, T0010, T0011, T0012)
+        // ============================================================================
+        
+        async function getQualitySummary() {
+            try {
+                showSection('welcome');
+                displayResponse('welcome', {}, 'loading');
+                const response = await fetch('/api/quality/summary');
+                const data = await response.json();
+                displayResponse('welcome', data);
+            } catch (error) {
+                displayResponse('welcome', { error: error.message });
+            }
+        }
+
+        async function getQualityScorecard() {
+            try {
+                const table = document.getElementById('scorecard-table').value;
+                let url = '/api/quality/scorecard';
+                if (table && table !== 'all') {
+                    url += `/${table}`;
+                }
+                const response = await fetch(url);
+                const data = await response.json();
+                displayResponse('quality-scorecard-response', data);
+            } catch (error) {
+                displayResponse('quality-scorecard-response', { error: error.message });
+            }
+        }
+
+        async function getValidationResults() {
+            try {
+                const table = document.getElementById('validation-table').value;
+                const failedOnly = document.getElementById('validation-failed-only').checked;
+                
+                let url = '/api/quality/validation-results?';
+                const params = new URLSearchParams();
+                
+                if (table) params.append('table_name', table);
+                if (failedOnly) params.append('failed_only', 'true');
+                
+                url += params.toString();
+                const response = await fetch(url);
+                const data = await response.json();
+                displayResponse('validation-results-response', data);
+            } catch (error) {
+                displayResponse('validation-results-response', { error: error.message });
+            }
+        }
+
+        async function getAnomalies() {
+            try {
+                const table = document.getElementById('anomalies-table').value;
+                const column = document.getElementById('anomalies-column').value;
+                const limit = document.getElementById('anomalies-limit').value;
+                
+                let url = '/api/quality/anomalies?';
+                const params = new URLSearchParams();
+                
+                if (table) params.append('table_name', table);
+                if (column) params.append('column_name', column);
+                if (limit) params.append('limit', limit);
+                
+                url += params.toString();
+                const response = await fetch(url);
+                const data = await response.json();
+                displayResponse('anomalies-response', data);
+            } catch (error) {
+                displayResponse('anomalies-response', { error: error.message });
+            }
+        }
+
+        async function getDataProfiles() {
+            try {
+                const table = document.getElementById('profiles-table').value;
+                let url = '/api/quality/profiles';
+                if (table) {
+                    url += `?table_name=${table}`;
+                }
+                const response = await fetch(url);
+                const data = await response.json();
+                displayResponse('data-profiles-response', data);
+            } catch (error) {
+                displayResponse('data-profiles-response', { error: error.message });
+            }
+        }
+
+        async function getQualityChecks() {
+            try {
+                const table = document.getElementById('quality-checks-table').value;
+                const failedOnly = document.getElementById('quality-checks-failed-only').checked;
+                
+                let url = '/api/quality/quality-checks?';
+                const params = new URLSearchParams();
+                
+                if (table) params.append('table_name', table);
+                if (failedOnly) params.append('failed_only', 'true');
+                
+                url += params.toString();
+                const response = await fetch(url);
+                const data = await response.json();
+                displayResponse('quality-checks-response', data);
+            } catch (error) {
+                displayResponse('quality-checks-response', { error: error.message });
+            }
+        }
+
     </script>
 </body>
 </html>

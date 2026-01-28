@@ -92,6 +92,183 @@ class DataValidator:
         return bool(re.match(pattern, str(email)))
     
     # ========================================
+    # PHASE 1 - T0008: Column-Level Validation (Regex, Min/Max)
+    # ========================================
+    @staticmethod
+    def validate_column_rules(df: pd.DataFrame, column: str, rules: Dict[str, Any]) -> Tuple[bool, Dict[str, Any]]:
+        """
+        Validate column against multiple rules
+        
+        Args:
+            df: DataFrame to validate
+            column: Column name
+            rules: Dict with keys: regex, min_value, max_value, allowed_values, not_null
+        
+        Returns:
+            (is_valid, validation_details)
+        """
+        results = {
+            'column': column,
+            'total_rows': len(df),
+            'passed': 0,
+            'failed': 0,
+            'failures': []
+        }
+        
+        if column not in df.columns:
+            return False, {'error': f'Column {column} not found'}
+        
+        col_data = df[column].dropna()  # Skip nulls unless not_null rule exists
+        
+        # Check not_null rule
+        if rules.get('not_null', False):
+            null_count = df[column].isnull().sum()
+            if null_count > 0:
+                results['failures'].append(f'{null_count} null values found')
+                results['failed'] += null_count
+        
+        # Check regex pattern
+        if 'regex' in rules and len(col_data) > 0:
+            pattern = re.compile(rules['regex'])
+            invalid = col_data[~col_data.astype(str).str.match(pattern)]
+            if len(invalid) > 0:
+                results['failures'].append(f'{len(invalid)} values failed regex')
+                results['failed'] += len(invalid)
+        
+        # Check min_value
+        if 'min_value' in rules:
+            try:
+                numeric_col = pd.to_numeric(col_data, errors='coerce')
+                below_min = numeric_col[numeric_col < rules['min_value']].count()
+                if below_min > 0:
+                    results['failures'].append(f'{below_min} values below minimum {rules["min_value"]}')
+                    results['failed'] += below_min
+            except:
+                pass
+        
+        # Check max_value
+        if 'max_value' in rules:
+            try:
+                numeric_col = pd.to_numeric(col_data, errors='coerce')
+                above_max = numeric_col[numeric_col > rules['max_value']].count()
+                if above_max > 0:
+                    results['failures'].append(f'{above_max} values above maximum {rules["max_value"]}')
+                    results['failed'] += above_max
+            except:
+                pass
+        
+        # Check allowed_values
+        if 'allowed_values' in rules:
+            invalid_vals = col_data[~col_data.isin(rules['allowed_values'])]
+            if len(invalid_vals) > 0:
+                results['failures'].append(f'{len(invalid_vals)} values not in allowed list')
+                results['failed'] += len(invalid_vals)
+        
+        results['passed'] = results['total_rows'] - results['failed']
+        is_valid = results['failed'] == 0
+        
+        return is_valid, results
+    
+    # ========================================
+    # PHASE 1 - T0009: Data Profiling Framework
+    # ========================================
+    @staticmethod
+    def profile_dataframe(df: pd.DataFrame, table_name: str = 'unknown') -> Dict[str, Any]:
+        """
+        Generate comprehensive statistical profile of DataFrame
+        
+        Returns:
+            Dict with profiling statistics
+        """
+        profile = {
+            'table_name': table_name,
+            'row_count': len(df),
+            'column_count': len(df.columns),
+            'memory_usage_mb': df.memory_usage(deep=True).sum() / 1024 / 1024,
+            'columns': {},
+            'generated_at': datetime.now().isoformat()
+        }
+        
+        for col in df.columns:
+            col_profile = {
+                'dtype': str(df[col].dtype),
+                'null_count': int(df[col].isnull().sum()),
+                'null_percent': round((df[col].isnull().sum() / len(df)) * 100, 2),
+                'unique_count': int(df[col].nunique()),
+                'cardinality': round((df[col].nunique() / len(df)) * 100, 2)
+            }
+            
+            # Numeric statistics
+            if pd.api.types.is_numeric_dtype(df[col]):
+                col_profile.update({
+                    'mean': float(df[col].mean()) if not df[col].isnull().all() else None,
+                    'median': float(df[col].median()) if not df[col].isnull().all() else None,
+                    'std': float(df[col].std()) if not df[col].isnull().all() else None,
+                    'min': float(df[col].min()) if not df[col].isnull().all() else None,
+                    'max': float(df[col].max()) if not df[col].isnull().all() else None,
+                    'q25': float(df[col].quantile(0.25)) if not df[col].isnull().all() else None,
+                    'q75': float(df[col].quantile(0.75)) if not df[col].isnull().all() else None
+                })
+            
+            # Top values (for categorical)
+            if col_profile['cardinality'] < 50:  # Low cardinality
+                top_vals = df[col].value_counts().head(5).to_dict()
+                col_profile['top_values'] = {str(k): int(v) for k, v in top_vals.items()}
+            
+            profile['columns'][col] = col_profile
+        
+        return profile
+    
+    # ========================================
+    # PHASE 1 - T0011: Anomaly Detection
+    # ========================================
+    @staticmethod
+    def detect_anomalies_zscore(df: pd.DataFrame, column: str, threshold: float = 3.0) -> Tuple[pd.DataFrame, Dict[str, Any]]:
+        """
+        Detect outliers using Z-score method
+        
+        Args:
+            df: DataFrame
+            column: Numeric column to check
+            threshold: Z-score threshold (default 3.0 = 99.7% confidence)
+        
+        Returns:
+            (anomalies_df, summary_dict)
+        """
+        if column not in df.columns:
+            return pd.DataFrame(), {'error': f'Column {column} not found'}
+        
+        # Calculate Z-scores
+        col_data = pd.to_numeric(df[column], errors='coerce').dropna()
+        mean = col_data.mean()
+        std = col_data.std()
+        
+        if std == 0:
+            return pd.DataFrame(), {'error': 'Standard deviation is zero'}
+        
+        z_scores = np.abs((col_data - mean) / std)
+        
+        # Find anomalies
+        anomaly_mask = z_scores > threshold
+        anomalies = df.loc[col_data[anomaly_mask].index].copy()
+        anomalies['z_score'] = z_scores[anomaly_mask].values
+        anomalies['deviation_from_mean'] = (col_data[anomaly_mask] - mean).values
+        
+        summary = {
+            'column': column,
+            'total_rows': len(df),
+            'anomaly_count': len(anomalies),
+            'anomaly_percent': round((len(anomalies) / len(df)) * 100, 2),
+            'threshold': threshold,
+            'mean': float(mean),
+            'std': float(std),
+            'min_anomaly_value': float(anomalies[column].min()) if len(anomalies) > 0 else None,
+            'max_anomaly_value': float(anomalies[column].max()) if len(anomalies) > 0 else None
+        }
+        
+        return anomalies, summary
+    
+    # ========================================
     # Team 1 - T0012: Config-driven cleaning rules (null validation)
     # ========================================
     @staticmethod

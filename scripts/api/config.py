@@ -21,6 +21,17 @@ from typing import List
 from pydantic import BaseModel
 
 
+def _default_db_host_port():
+    """Return default DB host/port based on runtime environment."""
+    if os.getenv("POSTGRES_HOST") or os.getenv("POSTGRES_PORT"):
+        return os.getenv("POSTGRES_HOST", "localhost"), os.getenv("POSTGRES_PORT", "5434")
+    # If running inside Docker, prefer service DNS name
+    if os.path.exists("/.dockerenv"):
+        return "postgres", "5432"
+    # Local development defaults
+    return "localhost", "5434"
+
+
 # ========================================
 # Team 1 - T0033: API Service Configuration
 # ========================================
@@ -42,8 +53,9 @@ class APIConfig(BaseModel):
     # Team 1 - T0033: Database Connection Settings
     # ========================================
     # PostgreSQL Connection (Airflow Metadata DB)
-    DB_HOST: str = os.getenv("POSTGRES_HOST", "localhost")
-    DB_PORT: int = int(os.getenv("POSTGRES_PORT", "5434"))
+    _db_host, _db_port = _default_db_host_port()
+    DB_HOST: str = _db_host
+    DB_PORT: int = int(_db_port)
     DB_NAME: str = os.getenv("POSTGRES_DB", "airflow")
     DB_USER: str = os.getenv("POSTGRES_USER", "airflow")
     DB_PASSWORD: str = os.getenv("POSTGRES_PASSWORD", "airflow")
