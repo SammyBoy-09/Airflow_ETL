@@ -341,7 +341,34 @@ Open http://localhost:5000 in your browser.
 
 **Keep Terminal Running**: The web dashboard requires the terminal to stay open. The REST API at http://localhost:8000 must also be running (it's part of the Docker stack).
 
-### 8. Verify System Health
+### 8. Configure Email Notifications (Optional)
+
+By default, email notifications are disabled. To enable them for DAG failure/success alerts:
+
+**Step 8.1**: Edit `Docker/.env` file and add your SMTP settings:
+
+```bash
+# Email Configuration (Optional - for DAG failure/success notifications)
+SMTP_USER=your-email@gmail.com
+SMTP_PASSWORD=your-app-password
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+```
+
+**Step 8.2**: For Gmail users, create an App Password:
+1. Go to https://myaccount.google.com/apppasswords
+2. Generate a new app password for "Mail"
+3. Use that password in `SMTP_PASSWORD` (not your regular Gmail password)
+
+**Step 8.3**: Restart Airflow to apply changes:
+```powershell
+cd Docker
+docker-compose restart webserver scheduler
+```
+
+**Note**: If you skip this step, the default email `airflow@example.com` will be used (notifications won't actually be sent, but DAGs will still run normally).
+
+### 9. Verify System Health
 
 Before running pipelines, verify all components are working:
 
@@ -376,7 +403,7 @@ Should show: "Did not find any relations" (tables will appear after first DAG ru
 
 **All Checks Passed?** You're ready to trigger your first DAG! 🎉
 
-### 9. Create Additional Airflow Users (Optional)
+### 10. Create Additional Airflow Users (Optional)
 
 By default, the admin user has username/password `airflow`/`airflow`. You can create additional users:
 
@@ -403,7 +430,7 @@ exit
 - **Viewer**: Read-only access
 - **Op**: Operations (manage connections, variables)
 
-### 10. Trigger Your First Pipeline
+### 11. Trigger Your First Pipeline
 
 You're now ready to execute the ETL pipeline!
 
@@ -441,7 +468,7 @@ Invoke-RestMethod -Uri "http://localhost:8000/api/v1/dags/etl_master_orchestrato
   -Headers @{"X-API-Key"="dev-key-12345"}
 ```
 
-### 11. Monitor Execution
+### 12. Monitor Execution
 
 **In Airflow UI**:
 1. Click on `etl_master_orchestrator` DAG name

@@ -31,8 +31,8 @@ import shutil
 # DAG DEFAULT ARGUMENTS
 # ========================================
 
-# Email for notifications
-ALERT_EMAIL = os.environ.get('SMTP_USER', 'sidiot6969@gmail.com')
+# Email for notifications (set SMTP_USER in .env file)
+ALERT_EMAIL = os.environ.get('SMTP_USER', 'airflow@example.com')
 
 # ========================================
 # Team 1 - T0032: Error Recovery Workflow
