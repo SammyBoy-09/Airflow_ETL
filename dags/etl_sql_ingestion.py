@@ -36,23 +36,24 @@ def extract_from_sql(**context):
     
     # Import here to avoid DAG import timeout
     from scripts.Extract import DataExtractor
-    from sqlalchemy import create_engine, inspect
     
     extractor = DataExtractor()
     
     # Connection string for local PostgreSQL (same as Airflow DB)
     connection_string = "postgresql+psycopg2://airflow:airflow@postgres:5432/airflow"
     
-    # FIRST-TIME SETUP CHECK: Verify table exists before extraction
-    engine = create_engine(connection_string)
-    inspector = inspect(engine)
+    # Example: Extract data from etl_output.customers table
+    # The extractor will handle table existence check internally
+    df, stats = extractor.extract_from_sql(
+        connection_string=connection_string,
+        table_name='customers',
+        schema='etl_output'
+    )
     
-    if not inspector.has_table('customers', schema='etl_output'):
-        logger.warning("⚠️ Table 'etl_output.customers' does not exist yet.")
-        logger.warning("📝 This is normal on first-time setup. Please run 'etl_master_orchestrator' first to create the tables.")
-        logger.warning("ℹ️ The SQL ingestion DAG extracts data FROM existing tables, so tables must be created first.")
-        
-        # Return success with zero records instead of failing
+    # Handle case where table doesn't exist (empty DataFrame returned)
+    if df is None or df.empty:
+        logger.warning("⚠️ No data extracted - table may not exist yet or is empty")
+        logger.warning("📝 This is normal on first-time setup. Please run 'etl_master_orchestrator' first.")
         return {
             'table_name': 'sql_extract_customers',
             'source': 'etl_output.customers',
@@ -60,34 +61,24 @@ def extract_from_sql(**context):
             'columns': 0,
             'staging_file': 'N/A',
             'status': 'skipped',
-            'message': 'Table does not exist yet - run main ETL pipeline first'
+            'message': 'No data available - run main ETL pipeline first'
         }
     
-    # Example: Extract data from etl_output.customers table
-    df, stats = extractor.extract_from_sql(
-        connection_string=connection_string,
-        table_name='customers',
-        schema='etl_output'
-    )
+    # Save to staging
+    staging_path = Path("data/staging/sql_extract_customers.csv")
+    staging_path.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(staging_path, index=False)
     
-    if df is not None:
-        # Save to staging
-        staging_path = Path("data/staging/sql_extract_customers.csv")
-        staging_path.parent.mkdir(parents=True, exist_ok=True)
-        df.to_csv(staging_path, index=False)
-        
-        logger.info(f"✅ SQL extraction complete: {len(df)} records")
-        
-        return {
-            'table_name': 'sql_extract_customers',
-            'source': 'etl_output.customers',
-            'rows_extracted': len(df),
-            'columns': len(df.columns),
-            'staging_file': str(staging_path),
-            'status': 'success'
-        }
-    else:
-        raise RuntimeError("SQL extraction failed")
+    logger.info(f"✅ SQL extraction complete: {len(df)} records")
+    
+    return {
+        'table_name': 'sql_extract_customers',
+        'source': 'etl_output.customers',
+        'rows_extracted': len(df),
+        'columns': len(df.columns),
+        'staging_file': str(staging_path),
+        'status': 'success'
+    }
 
 def execute_sql_transformation(**context):
     """Execute SQL transformation using templates"""

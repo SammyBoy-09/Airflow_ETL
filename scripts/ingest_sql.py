@@ -151,6 +151,16 @@ class SQLIngester:
         logger.info(f"📊 Extracting table: {full_table}")
         
         try:
+            # FIRST-TIME SETUP CHECK: Verify table exists before extraction
+            from sqlalchemy import inspect
+            inspector = inspect(self.engine)
+            
+            if not inspector.has_table(table_name, schema=schema):
+                logger.warning(f"⚠️ Table '{full_table}' does not exist in database.")
+                logger.warning(f"📝 This is normal on first-time setup. Please run the main ETL pipeline first to create the tables.")
+                # Return empty DataFrame with no columns instead of raising error
+                return pd.DataFrame()
+            
             # Build query
             cols = ", ".join(columns) if columns else "*"
             query = f"SELECT {cols} FROM {full_table}"
