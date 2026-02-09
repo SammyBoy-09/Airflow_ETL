@@ -341,109 +341,7 @@ Open http://localhost:5000 in your browser.
 
 **Keep Terminal Running**: The web dashboard requires the terminal to stay open. The REST API at http://localhost:8000 must also be running (it's part of the Docker stack).
 
-### 8. Configure Email Notifications (Optional)
-
-By default, email notifications are disabled. To enable them for DAG failure/success alerts:
-
-**Step 8.1**: Edit `Docker/.env` file and configure your email settings:
-
-```bash
-# Email Configuration (Required for notifications)
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USER=your-email@gmail.com              # Your Gmail address
-SMTP_PASSWORD=your-app-password             # Gmail app password (see below)
-SMTP_MAIL_FROM=your-email@gmail.com         # Same as SMTP_USER
-ALERT_EMAIL_TO=your-email@gmail.com         # Where to receive alerts
-```
-
-**Step 8.2**: For Gmail users, create an App Password:
-1. Go to https://myaccount.google.com/apppasswords
-2. Generate a new app password for "Mail"
-3. Use that password in `SMTP_PASSWORD` (not your regular Gmail password)
-
-**Step 8.3**: Restart Airflow to apply changes:
-```powershell
-cd Docker
-docker-compose restart webserver scheduler
-```
-
-**Note**: If you skip this step, notifications won't be sent, but DAGs will still run normally. **You must set `ALERT_EMAIL_TO` in `Docker/.env`** - this variable is used by all DAGs for sending failure/success alerts.
-
----
-
-### ⚠️ IMPORTANT: Troubleshooting Email Notifications
-
-**If you're not receiving email notifications even after configuring SMTP settings, follow these steps:**
-
-**1. Verify `.env` Configuration**
-
-Open `Docker/.env` and ensure ALL email fields are filled:
-
-```bash
-SMTP_HOST=smtp.gmail.com                    # ✓ Must be set
-SMTP_PORT=587                               # ✓ Must be set
-SMTP_USER=your-email@gmail.com              # ✓ MUST match your Gmail
-SMTP_PASSWORD=your-app-password             # ✓ MUST be App Password (not regular password)
-SMTP_MAIL_FROM=your-email@gmail.com         # ✓ MUST match SMTP_USER
-ALERT_EMAIL_TO=your-email@gmail.com         # ✓ THIS IS CRITICAL - where alerts go
-```
-
-**2. Verify `dag_base.py` Configuration**
-
-Check `dags/dag_base.py` line 35:
-
-```python
-# Email for notifications - MUST be configured in Docker/.env file (ALERT_EMAIL_TO)
-ALERT_EMAIL = os.environ.get('ALERT_EMAIL_TO', '')
-```
-
-- ✓ Should read from `ALERT_EMAIL_TO` environment variable
-- ✓ Default should be empty string `''` (no hardcoded email)
-- ❌ If you see any hardcoded email address here, **remove it** and use `ALERT_EMAIL_TO` instead
-
-**3. Enable Email Notifications in DAGs**
-
-By default, email notifications are disabled. To enable them, edit `dags/dag_base.py`:
-
-```python
-# Change these from False to True:
-'email_on_failure': True,   # Enable failure notifications
-'email_on_retry': False,    # Optional: enable retry notifications
-```
-
-**4. Test Email Configuration**
-
-After making changes:
-```powershell
-# 1. Restart services
-cd Docker
-docker-compose restart webserver scheduler
-
-# 2. Trigger a test DAG to verify emails are sent
-# 3. Check Airflow UI → Admin → Configurations → Search "smtp" to verify settings loaded
-```
-
-**5. Common Issues**
-
-| Issue | Solution |
-|-------|----------|
-| "Authentication failed" | Use Gmail App Password, not regular password |
-| "No emails received" | Check `ALERT_EMAIL_TO` is set in `.env` |
-| "SMTP connection refused" | Verify `SMTP_HOST` and `SMTP_PORT` are correct |
-| "Emails go to wrong address" | Update `ALERT_EMAIL_TO` in `.env` and restart |
-
-**6. Quick Verification Checklist**
-
-- [ ] `Docker/.env` has `ALERT_EMAIL_TO=your-email@gmail.com`
-- [ ] `Docker/.env` has valid Gmail App Password in `SMTP_PASSWORD`
-- [ ] `dags/dag_base.py` uses `os.environ.get('ALERT_EMAIL_TO', '')`
-- [ ] Email notifications enabled: `email_on_failure: True` in dag_base.py
-- [ ] Services restarted after changes: `docker-compose restart webserver scheduler`
-
----
-
-### 9. Verify System Health
+### 8. Verify System Health
 
 Before running pipelines, verify all components are working:
 
@@ -478,7 +376,7 @@ Should show: "Did not find any relations" (tables will appear after first DAG ru
 
 **All Checks Passed?** You're ready to trigger your first DAG! 🎉
 
-### 10. Create Additional Airflow Users (Optional)
+### 9. Create Additional Airflow Users (Optional)
 
 By default, the admin user has username/password `airflow`/`airflow`. You can create additional users:
 
@@ -505,7 +403,7 @@ exit
 - **Viewer**: Read-only access
 - **Op**: Operations (manage connections, variables)
 
-### 11. Trigger Your First Pipeline
+### 10. Trigger Your First Pipeline
 
 You're now ready to execute the ETL pipeline!
 
@@ -543,7 +441,7 @@ Invoke-RestMethod -Uri "http://localhost:8000/api/v1/dags/etl_master_orchestrato
   -Headers @{"X-API-Key"="dev-key-12345"}
 ```
 
-### 12. Monitor Execution
+### 11. Monitor Execution
 
 **In Airflow UI**:
 1. Click on `etl_master_orchestrator` DAG name
@@ -1601,4 +1499,34 @@ If you encounter issues, refer to:
 
 **Last Updated**: January 28, 2026  
 **Version**: 2.0 (Performance Optimized)
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License.
+
+```
+MIT License
+
+Copyright (c) 2026 Airflow ETL Pipeline Project Contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
 
